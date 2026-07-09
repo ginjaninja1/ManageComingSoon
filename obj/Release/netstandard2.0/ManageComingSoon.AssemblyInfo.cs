@@ -12,7 +12,7 @@ using System;
 using System.Reflection;
 
 [assembly: System.Reflection.AssemblyCompanyAttribute("Emby.ManageComingSoon")]
-[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("0.0.0.3")]
 [assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.0.0.3+79cefe2443cb2b42ac6d25f7ec435490bdf47efe")]
 [assembly: System.Reflection.AssemblyProductAttribute("Emby.ManageComingSoon")]
