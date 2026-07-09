@@ -1,0 +1,47 @@
+﻿└── ChannelEntryPoint.cs
+└── ChannelUI.cs
+└── ComingSoonEntryPoint.cs
+└── ManageComingSoonPlugin.cs
+📂 Model/
+    └── PluginConfiguration.cs
+    └── TmdbMovieResult.cs
+📂 Services/
+    └── AddMovieEntry.cs
+    └── AddMovieTask.cs
+    └── AddMovieTracker.cs
+    └── EmbyLibraryAddService.cs
+    └── EmbyLibraryMakeService.cs
+    └── EmbyLibraryService.cs
+    └── EmbyLibrarySharedService.cs
+    └── MakeLiveTask.cs
+    └── MakeLiveTracker.cs
+    └── MigrationAnalyzer.cs
+    └── TmdbService.cs
+📂 Storage/
+    └── AddMovieStore.cs
+    └── MakeLiveStore.cs
+    └── PluginConfigStore.cs
+        └── Addmoviepageview.commands.cs
+        └── Addmoviepageview.conflict.cs
+        └── AddMoviePageView.cs
+        └── Addmoviepageview.polling.cs
+        └── Addmoviepageview.rebuild.cs
+        └── AddMoviePageView.rowbuilders.cs
+        └── AddMovieUI.cs
+        └── LibraryPicker.cs
+        └── ConfigurationPageView.cs
+        └── ConfigurationUI.cs
+        └── MakeLivePageView.commands.cs
+        └── MakeLivePageView.cs
+        └── MakeLivePageView.polling.cs
+        └── MakeLivePageView.rebuild.cs
+        └── MakeLivePageView.rowbuilders.cs
+        └── MakeLiveUI.cs
+📂 UI/
+    📂 AddMovie/
+    📂 Configuration/
+    📂 MakeLive/
+    └── MainPageController.cs
+    └── TabPageController.cs
+📂 UIBaseClasses/
+    └── UIBaseClasses.cs
