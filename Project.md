@@ -26,8 +26,8 @@ Confirm next step.
 
 
 
-# Project Log
-A record of what was delivered and when
+# Implementation Status
+A record of what has been delivered to what quality/completion level.
 
 
 
