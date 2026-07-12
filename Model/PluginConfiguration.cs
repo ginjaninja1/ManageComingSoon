@@ -46,5 +46,11 @@ namespace ManageComingSoon.Model
 
 
         public string EmbyApiKey { get; set; } = string.Empty;
+
+        public string RadarrUrl { get; set; } = "http://127.0.0.1:7878";
+
+        public string RadarrApiKey { get; set; } = "";
+
+        public int RadarrRefreshMinutes { get; set; } = 15;
     }
 }
