@@ -28,18 +28,23 @@ namespace ManageComingSoon.Services
             this.logger = logger;
         }
 
-        public async Task<IReadOnlyList<RadarrMovie>> GetMissingMoviesAsync(
+        // Returns null (not an empty list) on any failure to reach/parse
+        // Radarr's response — this distinction matters. Callers must treat
+        // null as "sync skipped, leave existing state untouched" and must
+        // NEVER treat it the same as an empty-but-successful result, which
+        // would otherwise look identical to "Radarr says nothing qualifies
+        // any more" and cause everything to be wrongly removed.
+        private async Task<List<RadarrMovie>> GetAllMoviesAsync(
             PluginConfiguration config,
             CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(config.RadarrApiKey))
             {
                 logger.Warn("Radarr API key has not been configured.");
-                return Array.Empty<RadarrMovie>();
+                return null;
             }
 
             var url = config.RadarrUrl.TrimEnd('/') + "/api/v3/movie";
-
             logger.Info("Querying Radarr: {0}", url);
 
             var options = new HttpRequestOptions
@@ -47,26 +52,71 @@ namespace ManageComingSoon.Services
                 Url = url,
                 CancellationToken = cancellationToken
             };
-
             options.RequestHeaders["X-Api-Key"] = config.RadarrApiKey;
 
-            using (var response = await httpClient.GetResponse(options).ConfigureAwait(false))
-            using (var stream = response.Content)
-            using (var reader = new StreamReader(stream))
+            try
             {
-                var jsonText = await reader.ReadToEndAsync().ConfigureAwait(false);
+                using (var response = await httpClient.GetResponse(options).ConfigureAwait(false))
+                using (var stream = response.Content)
+                using (var reader = new StreamReader(stream))
+                {
+                    var jsonText = await reader.ReadToEndAsync().ConfigureAwait(false);
+                    var movies = json.DeserializeFromString<List<RadarrMovie>>(jsonText);
 
-                var movies = json.DeserializeFromString<List<RadarrMovie>>(jsonText)
-                             ?? new List<RadarrMovie>();
+                    if (movies == null)
+                    {
+                        logger.Warn("Radarr response could not be parsed into a movie list.");
+                        return null;
+                    }
 
-                logger.Info("Radarr returned {0} movies.", movies.Count);
-
-                return movies
-                    .Where(i => i.Monitored)
-                    .Where(i => !i.HasFile)
-                    .OrderBy(i => i.Title)
-                    .ToList();
+                    logger.Info("Radarr returned {0} movies.", movies.Count);
+                    return movies;
+                }
             }
+            catch (Exception ex)
+            {
+                logger.ErrorException("ManageComingSoon: Radarr call failed for {0}", ex, url);
+                return null;
+            }
+        }
+
+        // Existing behaviour, unchanged: monitored + no file yet, sorted by
+        // title. Kept exactly as-is since other parts of the plugin may
+        // already depend on this specific method name/behaviour.
+        public async Task<IReadOnlyList<RadarrMovie>> GetMissingMoviesAsync(
+            PluginConfiguration config,
+            CancellationToken cancellationToken)
+        {
+            var movies = await GetAllMoviesAsync(config, cancellationToken).ConfigureAwait(false);
+            if (movies == null) return Array.Empty<RadarrMovie>();
+
+            return movies
+                .Where(i => i.Monitored)
+                .Where(i => !i.HasFile)
+                .OrderBy(i => i.Title)
+                .ToList();
+        }
+
+        // "Coming soon" for the Radarr channel: monitored, not yet
+        // fulfilled by Radarr. Confirmed this is the exact same definition
+        // as "missing" above — deliberately not duplicating the filter
+        // logic, just giving the channel/sync code a name that matches its
+        // own vocabulary. Returns null (not empty) on failure — see
+        // GetAllMoviesAsync's doc comment; the scheduled task and the
+        // channel's Live-mode path must both branch on null explicitly and
+        // must never treat it as "zero movies qualify".
+        public async Task<IReadOnlyList<RadarrMovie>> GetComingSoonMoviesAsync(
+            PluginConfiguration config,
+            CancellationToken cancellationToken)
+        {
+            var movies = await GetAllMoviesAsync(config, cancellationToken).ConfigureAwait(false);
+            if (movies == null) return null;
+
+            return movies
+                .Where(i => i.Monitored)
+                .Where(i => !i.HasFile)
+                .OrderBy(i => i.Title)
+                .ToList();
         }
     }
 }

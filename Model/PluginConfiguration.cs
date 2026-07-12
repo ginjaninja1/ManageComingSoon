@@ -2,6 +2,31 @@ namespace ManageComingSoon.Model
 {
     using MediaBrowser.Model.Plugins;
 
+    public enum RadarrSyncMode
+    {
+        // Scheduled task is the only thing that talks to Radarr; results are
+        // written to a local cache file and GetChannelItems reads the cache
+        // only. Default — decouples channel browsing from Radarr uptime.
+        Cached,
+
+        // GetChannelItems calls Radarr directly on every request. Simpler,
+        // always fresh, but ties the channel's availability/responsiveness
+        // to Radarr being reachable at that exact moment.
+        Live
+    }
+
+    public enum RadarrRemovalStrategy
+    {
+        // Simply omit the item from the list returned by GetChannelItems /
+        // the cache, then call RefreshChannelContent, relying on Emby to
+        // reconcile and drop the stale entry on its own.
+        Implicit,
+
+        // Explicitly call ISupportsDelete.DeleteItem for anything that
+        // fell out of scope, in addition to omitting it going forward.
+        ExplicitDelete
+    }
+
     public class PluginConfiguration : BasePluginConfiguration
     {
         // ---- TMDB ----
@@ -20,6 +45,7 @@ namespace ManageComingSoon.Model
 
         // ---- Make Live options ----
         public bool MakeLiveMoveToNewLocation { get; set; } = false;
+
         public bool MakeLiveDeleteStubFile { get; set; } = true;
 
         // Only meaningful when MakeLiveDeleteStubFile is true — a stub file
@@ -44,7 +70,6 @@ namespace ManageComingSoon.Model
         // Live state machine's page-navigation guarantees unconditional.
         public string ComingSoonTagText { get; set; } = "Coming Soon";
 
-
         public string EmbyApiKey { get; set; } = string.Empty;
 
         public string RadarrUrl { get; set; } = "http://127.0.0.1:7878";
@@ -52,5 +77,29 @@ namespace ManageComingSoon.Model
         public string RadarrApiKey { get; set; } = "";
 
         public int RadarrRefreshMinutes { get; set; } = 15;
+
+        // ---- Radarr "Coming Soon" channel ----
+        // Master switch for the whole Radarr channel feature. Everything
+        // below is inert while this is false.
+        public bool RadarrEnabled { get; set; } = false;
+
+        // Gates whether the sync is permitted to remove channel items at
+        // all, independent of RadarrSyncMode/RadarrRemovalStrategy. This is
+        // deliberately a separate setting from any other "enable delete"
+        // flag elsewhere in the plugin (e.g. MakeLiveDeleteStubFile) — the
+        // two are unrelated: one is a filesystem stub delete, this one is a
+        // channel-item removal with no filesystem interaction at all.
+        public bool RadarrEnableDelete { get; set; } = false;
+
+        // Cached vs Live — see RadarrSyncMode doc comments above. Defaulting
+        // to Cached because it's the safer, better-understood starting mode;
+        // both are wired up so the two can be compared directly.
+        public RadarrSyncMode RadarrSyncMode { get; set; } = RadarrSyncMode.Cached;
+
+        // Implicit vs ExplicitDelete — see RadarrRemovalStrategy doc comments.
+        // Neither has been confirmed empirically yet to actually cause Emby
+        // to drop a stale channel item; this flag exists specifically so both
+        // can be tried against a small sample set and the working one kept.
+        public RadarrRemovalStrategy RadarrRemovalStrategy { get; set; } = RadarrRemovalStrategy.Implicit;
     }
 }

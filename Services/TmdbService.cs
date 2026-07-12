@@ -4,7 +4,6 @@
 // Property names on the POCO classes match TMDB's JSON keys exactly as
 // ServiceStack.Text expects them (it maps snake_case keys to PascalCase
 // properties case-insensitively, so release_date -> ReleaseDate etc).
-
 namespace ManageComingSoon.Services
 {
     using System;
@@ -77,6 +76,7 @@ namespace ManageComingSoon.Services
         public bool IsConfidentMatch(List<TmdbMovieResult> results, string movieName, int? year)
         {
             if (results.Count == 0) return false;
+
             var top = results[0];
 
             // A candidate with no release year on TMDB is a poor candidate by
@@ -101,12 +101,14 @@ namespace ManageComingSoon.Services
                 TitlesRoughlyEqual(top.OriginalTitle, movieName);
 
             if (titleMatch && year.HasValue && top.ReleaseYear == year.Value) return true;
+
             if (titleMatch && yearMatch && results.Count >= 2)
             {
                 double ratio = results[1].Popularity > 0
                     ? top.Popularity / results[1].Popularity : 10.0;
                 if (ratio > 3.0) return true;
             }
+
             return false;
         }
 
@@ -125,6 +127,36 @@ namespace ManageComingSoon.Services
             foreach (char c in s)
                 if (char.IsLetterOrDigit(c)) sb.Append(char.ToLowerInvariant(c));
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// Direct lookup by TMDB ID — for use when the ID is already known
+        /// (e.g. from Radarr's TmdbId field) and no name/year fuzzy-matching
+        /// is needed. Used as the fallback enrichment path for Radarr-sourced
+        /// channel items when Radarr's own Images list has no usable poster.
+        /// Returns null on any failure — never throws.
+        /// </summary>
+        public async Task<TmdbMovieDetails> GetMovieDetailsAsync(
+            string apiKey,
+            int tmdbId,
+            CancellationToken token = default(CancellationToken))
+        {
+            string url = string.Format("{0}/movie/{1}?api_key={2}",
+                BaseUrl, tmdbId, Uri.EscapeDataString(apiKey));
+
+            string raw = await FetchStringAsync(url, token).ConfigureAwait(false);
+            if (string.IsNullOrEmpty(raw)) return null;
+
+            try
+            {
+                return this.json.DeserializeFromString<TmdbMovieDetails>(raw);
+            }
+            catch (Exception ex)
+            {
+                this.logger.ErrorException(
+                    "ManageComingSoon: Failed to parse TMDB movie details for {0}", ex, tmdbId);
+                return null;
+            }
         }
 
         /// <summary>
@@ -206,10 +238,12 @@ namespace ManageComingSoon.Services
             {
                 var wrapper = this.json.DeserializeFromString<TmdbAltTitlesWrapper>(raw);
                 if (wrapper == null || wrapper.Titles == null) return new List<string>();
+
                 var list = new List<string>();
                 foreach (var t in wrapper.Titles)
                     if (!string.IsNullOrEmpty(t.Title))
                         list.Add(t.Title);
+
                 return list;
             }
             catch
@@ -248,11 +282,11 @@ namespace ManageComingSoon.Services
         // Scoring
         // -----------------------------------------------------------------------
         // Design goals:
-        //   • Title signals dominate (exact match is almost certainly right)
-        //   • Year is a strong secondary signal — exact match gets a big boost
-        //   • Word-level Jaccard similarity handles partial/reordered titles
-        //   • Recency bonus when no year given (user likely means a new release)
-        //   • Popularity (log-scaled) breaks ties without drowning title/year
+        //  • Title signals dominate (exact match is almost certainly right)
+        //  • Year is a strong secondary signal — exact match gets a big boost
+        //  • Word-level Jaccard similarity handles partial/reordered titles
+        //  • Recency bonus when no year given (user likely means a new release)
+        //  • Popularity (log-scaled) breaks ties without drowning title/year
         // -----------------------------------------------------------------------
 
         private static double Score(
@@ -268,7 +302,6 @@ namespace ManageComingSoon.Services
             string rOrig = r.OriginalTitle ?? string.Empty;
 
             // ---- Title matching -----------------------------------------------
-
             // Exact full title
             if (string.Equals(rTitle, query, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(rOrig, query, StringComparison.OrdinalIgnoreCase))
@@ -348,8 +381,10 @@ namespace ManageComingSoon.Services
         private static HashSet<string> TokeniseWords(string text)
         {
             if (string.IsNullOrEmpty(text)) return new HashSet<string>();
+
             var words = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var current = new System.Text.StringBuilder();
+
             foreach (char c in text)
             {
                 if (char.IsLetterOrDigit(c))
@@ -362,6 +397,7 @@ namespace ManageComingSoon.Services
                     current.Clear();
                 }
             }
+
             if (current.Length > 0) words.Add(current.ToString());
             return words;
         }
@@ -405,5 +441,23 @@ namespace ManageComingSoon.Services
         {
             public string Name { get; set; }
         }
+    }
+
+    /// <summary>
+    /// Response shape for TMDB's GET /movie/{id} — used only by the direct-by-ID
+    /// enrichment path (GetMovieDetailsAsync), separate from TmdbMovieResult
+    /// which is shaped for /search/movie results. Field names match TMDB's
+    /// snake_case JSON keys per ServiceStack.Text's case-insensitive mapping.
+    /// </summary>
+    public class TmdbMovieDetails
+    {
+        public int Id { get; set; }
+        public string Title { get; set; }
+        public string OriginalTitle { get; set; }
+        public string Overview { get; set; }
+        public string PosterPath { get; set; }
+        public string BackdropPath { get; set; }
+        public string ReleaseDate { get; set; }
+        public string ImdbId { get; set; }
     }
 }
