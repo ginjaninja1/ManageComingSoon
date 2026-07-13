@@ -2,6 +2,7 @@ namespace ManageComingSoon.UI.Configuration
 {
     using Emby.Web.GenericEdit.Common;
     using Emby.Web.GenericEdit.Elements;
+    using Emby.Web.GenericEdit.Elements.List;
     using ManageComingSoon.UIBaseClasses.Views;
     using MediaBrowser.Controller.Library;
     using MediaBrowser.Model.Plugins;
@@ -10,7 +11,6 @@ namespace ManageComingSoon.UI.Configuration
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
-    using System.Reflection;
     using System.Threading.Tasks;
 
     internal class ConfigurationPageView : PluginPageView
@@ -21,7 +21,9 @@ namespace ManageComingSoon.UI.Configuration
         };
 
         // Must match StubResourceName in EmbyLibraryAddService — that's the
-        // single place the default video is actually written from.
+        // single place the default video is actually written from. Also
+        // reused by RadarrComingSoonChannel.ResolveStubVideoPath for the
+        // Radarr channel's own default placeholder.
         private const string DefaultStubResourceName = "ManageComingSoon.comingsoon.mp4";
 
         private readonly ManageComingSoonPlugin plugin;
@@ -56,9 +58,6 @@ namespace ManageComingSoon.UI.Configuration
                 : cfg.ComingSoonTagText;
 
             // ---- Radarr integration ----
-            // None of this — including the three fields that already existed
-            // on PluginConfiguration before this section was added — was ever
-            // wired up to the UI previously.
             ui.RadarrEnabled = cfg.RadarrEnabled;
             ui.RadarrUrl = cfg.RadarrUrl;
             ui.RadarrApiKey = cfg.RadarrApiKey;
@@ -66,10 +65,12 @@ namespace ManageComingSoon.UI.Configuration
             ui.RadarrEnableDelete = cfg.RadarrEnableDelete;
             ui.RadarrSyncMode = cfg.RadarrSyncMode;
             ui.RadarrRemovalStrategy = cfg.RadarrRemovalStrategy;
+            ui.RadarrStubVideoPath = cfg.RadarrStubVideoPath;
 
             // Reflect the persisted (already-validated) stub video state on load.
             // Config only ever holds a valid path or empty — see SaveConfiguration.
-            RefreshStubVideoStatus(ui, cfg.ComingSoonStubVideoPath);
+            RefreshStubVideoStatus(ui.StubVideoStatusItem, cfg.ComingSoonStubVideoPath);
+            RefreshStubVideoStatus(ui.RadarrStubVideoStatusItem, cfg.RadarrStubVideoPath);
 
             PopulateLibraryOptions(ui);
         }
@@ -93,7 +94,23 @@ namespace ManageComingSoon.UI.Configuration
                 cfg.ComingSoonStubVideoPath = string.Empty;
                 this.plugin.UpdateConfiguration(cfg);
 
-                SetStubVideoStatus(ui,
+                SetStubVideoStatus(ui.StubVideoStatusItem,
+                    string.Format("Using default {0}", FormatDefaultStubSizeMb()),
+                    ItemStatus.Unavailable);
+
+                return Task.FromResult<IPluginUIView>(this);
+            }
+
+            if (commandId == "ClearRadarrStubVideo")
+            {
+                var ui = UI;
+                ui.RadarrStubVideoPath = string.Empty;
+
+                var cfg = this.plugin.Configuration;
+                cfg.RadarrStubVideoPath = string.Empty;
+                this.plugin.UpdateConfiguration(cfg);
+
+                SetStubVideoStatus(ui.RadarrStubVideoStatusItem,
                     string.Format("Using default {0}", FormatDefaultStubSizeMb()),
                     ItemStatus.Unavailable);
 
@@ -143,63 +160,73 @@ namespace ManageComingSoon.UI.Configuration
                 cfg.ComingSoonTagText = tagText;
             }
 
-            // ---- Stub video path -------------------------------------------------
+            // ---- Stub video paths -------------------------------------------------
             // Single source of truth: the path itself. No separate enable toggle.
             // The UI field is ALWAYS left exactly as the user typed/picked it —
             // never cleared or overwritten by this method — so the user can always
             // see, edit, or clear their own input regardless of validity. Only the
-            // CONFIG value (what AddMoviePageView actually uses) is gated on validity.
-            string path = (ui.ComingSoonStubVideoPath ?? string.Empty).Trim();
+            // CONFIG value is gated on validity. Same validation logic applied to
+            // both the ComingSoon and Radarr stub fields.
+            cfg.ComingSoonStubVideoPath = ValidateStubVideoPath(
+                ui.ComingSoonStubVideoPath, ui.StubVideoStatusItem);
 
-            if (string.IsNullOrEmpty(path))
-            {
-                cfg.ComingSoonStubVideoPath = string.Empty;
-                SetStubVideoStatus(ui,
-                    string.Format("Using default {0}", FormatDefaultStubSizeMb()),
-                    ItemStatus.Unavailable);
-            }
-            else
-            {
-                string ext = Path.GetExtension(path).ToLowerInvariant();
-
-                if (!IsValidVideoExtension(ext))
-                {
-                    cfg.ComingSoonStubVideoPath = string.Empty; // not active — fall back to default
-                    SetStubVideoStatus(ui,
-                        "Invalid file type — must be mp4, mkv, avi or mov. Using default.",
-                        ItemStatus.Failed);
-                }
-                else if (!File.Exists(path))
-                {
-                    cfg.ComingSoonStubVideoPath = string.Empty; // not active — fall back to default
-                    SetStubVideoStatus(ui,
-                        "File not found. Using default.",
-                        ItemStatus.Failed);
-                }
-                else
-                {
-                    cfg.ComingSoonStubVideoPath = path; // active
-                    SetStubVideoStatus(ui,
-                        string.Format(
-                            "Custom Active {0} {1}. Clear the field above to change or remove it.",
-                            Path.GetFileName(path),
-                            FormatFileSizeMb(path)),
-                        ItemStatus.Succeeded);
-                }
-            }
+            cfg.RadarrStubVideoPath = ValidateStubVideoPath(
+                ui.RadarrStubVideoPath, ui.RadarrStubVideoStatusItem);
 
             this.plugin.UpdateConfiguration(cfg);
         }
 
         // -----------------------------------------------------------------------
-        // Stub video status helpers
+        // Stub video status helpers — shared by ComingSoon and Radarr fields
         // -----------------------------------------------------------------------
 
-        private static void SetStubVideoStatus(ConfigurationUI ui, string text, ItemStatus status)
+        /// <summary>
+        /// Validates a stub video path field, updates the corresponding status
+        /// item to reflect the result, and returns what should actually be
+        /// saved into config (empty string if invalid/missing — falls back to
+        /// the default rather than persisting a broken path).
+        /// </summary>
+        private static string ValidateStubVideoPath(string rawPath, GenericListItem statusItem)
         {
-            // Direct reference — no string-based lookup, so a rename of the
-            // display text can never silently break this again.
-            var targetItem = ui.StubVideoStatusItem;
+            string path = (rawPath ?? string.Empty).Trim();
+
+            if (string.IsNullOrEmpty(path))
+            {
+                SetStubVideoStatus(statusItem,
+                    string.Format("Using default {0}", FormatDefaultStubSizeMb()),
+                    ItemStatus.Unavailable);
+                return string.Empty;
+            }
+
+            string ext = Path.GetExtension(path).ToLowerInvariant();
+
+            if (!IsValidVideoExtension(ext))
+            {
+                SetStubVideoStatus(statusItem,
+                    "Invalid file type — must be mp4, mkv, avi or mov. Using default.",
+                    ItemStatus.Failed);
+                return string.Empty;
+            }
+
+            if (!File.Exists(path))
+            {
+                SetStubVideoStatus(statusItem,
+                    "File not found. Using default.",
+                    ItemStatus.Failed);
+                return string.Empty;
+            }
+
+            SetStubVideoStatus(statusItem,
+                string.Format(
+                    "Custom Active {0} {1}. Clear the field above to change or remove it.",
+                    Path.GetFileName(path),
+                    FormatFileSizeMb(path)),
+                ItemStatus.Succeeded);
+            return path;
+        }
+
+        private static void SetStubVideoStatus(GenericListItem targetItem, string text, ItemStatus status)
+        {
             if (targetItem != null)
             {
                 targetItem.SecondaryText = text;
@@ -208,20 +235,20 @@ namespace ManageComingSoon.UI.Configuration
         }
 
         /// <summary>
-        /// Sets the status item on page load to reflect the currently saved
+        /// Sets a status item on page load to reflect the currently saved
         /// (already-validated) config path, without re-running validation.
         /// </summary>
-        private static void RefreshStubVideoStatus(ConfigurationUI ui, string savedPath)
+        private static void RefreshStubVideoStatus(GenericListItem targetItem, string savedPath)
         {
             if (string.IsNullOrEmpty(savedPath))
             {
-                SetStubVideoStatus(ui,
+                SetStubVideoStatus(targetItem,
                     string.Format("Using default {0}", FormatDefaultStubSizeMb()),
                     ItemStatus.Unavailable);
             }
             else
             {
-                SetStubVideoStatus(ui,
+                SetStubVideoStatus(targetItem,
                     string.Format(
                         "Custom Active {0} {1}",
                         Path.GetFileName(savedPath),
@@ -250,8 +277,9 @@ namespace ManageComingSoon.UI.Configuration
 
         /// <summary>
         /// Returns the size of the embedded default stub video (the one
-        /// EmbyLibraryAddService falls back to via GetManifestResourceStream),
-        /// formatted as "[NMB]", or empty string if it can't be read.
+        /// EmbyLibraryAddService/RadarrComingSoonChannel fall back to via
+        /// GetManifestResourceStream), formatted as "[NMB]", or empty string
+        /// if it can't be read.
         /// </summary>
         private static string FormatDefaultStubSizeMb()
         {

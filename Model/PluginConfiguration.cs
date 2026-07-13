@@ -96,10 +96,18 @@ namespace ManageComingSoon.Model
         // both are wired up so the two can be compared directly.
         public RadarrSyncMode RadarrSyncMode { get; set; } = RadarrSyncMode.Cached;
 
-        // Implicit vs ExplicitDelete — see RadarrRemovalStrategy doc comments.
-        // Neither has been confirmed empirically yet to actually cause Emby
-        // to drop a stale channel item; this flag exists specifically so both
-        // can be tried against a small sample set and the working one kept.
+        // Implicit removal is confirmed sufficient on its own (Emby's built-in
+        // channel-refresh reconciles purely from what GetChannelItems returns
+        // each run) — this flag is kept as a safety toggle for the
+        // user-initiated delete path (ISupportsDelete/CanDelete), not because
+        // it's required for normal add/remove sync to work.
         public RadarrRemovalStrategy RadarrRemovalStrategy { get; set; } = RadarrRemovalStrategy.Implicit;
+
+        // Same semantics as ComingSoonStubVideoPath: empty = use the plugin's
+        // embedded default placeholder video; non-empty = a validated custom
+        // path. This is the file every Radarr channel item's MediaSources
+        // points at for playback, since channel items have no folder of
+        // their own to hold a per-item stub copy.
+        public string RadarrStubVideoPath { get; set; } = string.Empty;
     }
 }

@@ -31,5 +31,12 @@ namespace ManageComingSoon.Services.Models
         public List<RadarrChannelCacheItem> Items { get; set; } = new List<RadarrChannelCacheItem>();
         public bool LastSyncSucceeded { get; set; }
         public System.DateTimeOffset? LastSyncUtc { get; set; }
+
+        // Resolved, on-disk path to the placeholder video every channel
+        // item's MediaSources points at for playback. Owned/updated by
+        // RadarrChannelSyncTask each run (see ResolveStubVideoPath on
+        // RadarrComingSoonChannel) — the channel itself only reads this in
+        // Cached mode, avoiding a filesystem check on every browse request.
+        public string StubVideoPath { get; set; } = string.Empty;
     }
 }

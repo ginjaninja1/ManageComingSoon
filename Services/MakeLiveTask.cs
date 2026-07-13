@@ -10,7 +10,7 @@ namespace ManageComingSoon.Services
     using MediaBrowser.Model.Logging;
     using MediaBrowser.Model.Tasks;
 
-    public class MakeLiveTask : IScheduledTask
+    public class MakeLiveTask : IScheduledTask, IConfigurableScheduledTask
     {
         // Static dependencies – set by ManageComingSoonPlugin before any execution
         private static EmbyLibraryMakeService staticLibraryService;
@@ -18,6 +18,16 @@ namespace ManageComingSoon.Services
         private static Func<string> staticGetApiKey;
         private static Func<int> staticGetMaxStubFileSizeMb;
         private static Func<bool> staticGetUnlockTags;
+
+        public bool IsHidden => true;
+
+        // Keeps the task active so it can still be executed via code
+        public bool IsEnabled => true;
+
+        // Determines whether the execution history is recorded in Emby's task log db
+        public bool IsLogged => true;
+
+
 
         public static void SetDependencies(
             EmbyLibraryMakeService libraryService,

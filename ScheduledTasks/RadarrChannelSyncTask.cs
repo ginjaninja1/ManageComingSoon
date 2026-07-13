@@ -1,12 +1,16 @@
-﻿// ASSUMPTIONS FLAGGED FOR REVIEW — see RadarrComingSoonChannel.cs header for
-// the shared list (ManageComingSoonPlugin.Instance.Configuration, cache file location, etc).
-// Additional ones specific to this file:
-//   6. IScheduledTask / TaskTriggerInfo shape (property names, Execute
-//      signature) is written to the most common Emby plugin SDK pattern but
-//      not verified against this project's actual SDK version — confirm it
-//      compiles and adjust member names if the installed SDK differs.
-//   7. IChannelManager is assumed constructor-injectable via Emby's DI,
-//      matching how RadarrClient/TmdbService are already used elsewhere.
+﻿// STATUS (updated after live testing — see chat history for full log traces):
+//   6. CONFIRMED WORKING — IScheduledTask registration/triggers/Execute.
+//   7. CONFIRMED WORKING — IChannelManager/ITaskManager/IApplicationPaths
+//      all constructor-injectable via Emby's DI.
+//   8. CONFIRMED — the built-in channel-persistence task matches by Key
+//      ("RefreshInternetChannels") on this server. Name-match kept only as
+//      a fallback in case a different server/version doesn't expose that
+//      Key the same way.
+//   9. NEW — this task now also owns resolving/extracting the Radarr stub
+//      placeholder video (see RadarrComingSoonChannel.ResolveStubVideoPath)
+//      once per run and storing the resolved path in the cache, so
+//      GetChannelItems in Cached mode never needs to touch the filesystem
+//      for this itself.
 
 namespace ManageComingSoon.ScheduledTasks
 {
@@ -18,26 +22,38 @@ namespace ManageComingSoon.ScheduledTasks
     using ManageComingSoon.Channels;
     using ManageComingSoon.Model;
     using ManageComingSoon.Services;
+    using MediaBrowser.Common.Configuration;
+    using MediaBrowser.Controller;
     using MediaBrowser.Controller.Channels;
     using MediaBrowser.Model.Logging;
     using MediaBrowser.Model.Tasks;
 
     public class RadarrChannelSyncTask : IScheduledTask
     {
+        // Emby's own task that persists channel items into the real item
+        // database (confirmed: it's the one that assigns an InternalId/Guid
+        // and runs the full metadata provider pipeline — our own
+        // RefreshChannelContent call does not do this on its own).
+        private const string RefreshChannelsTaskKey = "RefreshInternetChannels";
+        private const string RefreshChannelsTaskName = "Refresh Internet Channels";
+
         private readonly RadarrClient radarrClient;
-        private readonly RadarrComingSoonChannel channel;
         private readonly IChannelManager channelManager;
+        private readonly ITaskManager taskManager;
+        private readonly IApplicationPaths appPaths;
         private readonly ILogger logger;
 
         public RadarrChannelSyncTask(
             RadarrClient radarrClient,
-            RadarrComingSoonChannel channel,
             IChannelManager channelManager,
+            ITaskManager taskManager,
+            IApplicationPaths appPaths,
             ILogger logger)
         {
             this.radarrClient = radarrClient;
-            this.channel = channel;
             this.channelManager = channelManager;
+            this.taskManager = taskManager;
+            this.appPaths = appPaths;
             this.logger = logger;
         }
 
@@ -46,7 +62,7 @@ namespace ManageComingSoon.ScheduledTasks
         public string Key => "ManageComingSoon-RadarrChannelSync";
 
         public string Description =>
-            "Queries Radarr for monitored, not-yet-downloaded movies and updates the Radarr Coming Soon channel's cache. Only runs when Radarr integration is enabled and sync mode is set to Cached.";
+            "Queries Radarr for monitored, not-yet-downloaded movies, updates the Radarr Coming Soon channel's cache, ensures the placeholder video exists, and persists changes into Emby. Only runs when Radarr integration is enabled and sync mode is Cached.";
 
         public string Category => "Manage Coming Soon";
 
@@ -93,6 +109,13 @@ namespace ManageComingSoon.ScheduledTasks
                 return;
             }
 
+            var channel = channelManager.GetChannel<RadarrComingSoonChannel>();
+            if (channel == null)
+            {
+                logger.Warn("ManageComingSoon: Radarr Coming Soon channel is not registered with ChannelManager yet — skipping this sync run.");
+                return;
+            }
+
             var cache = channel.ReadCache();
             var oldIds = new HashSet<int>(cache.Items.Select(i => i.TmdbId));
 
@@ -113,7 +136,6 @@ namespace ManageComingSoon.ScheduledTasks
                 .ToList();
 
             var newIds = new HashSet<int>(newItems.Select(i => i.TmdbId));
-
             var added = newIds.Except(oldIds).Count();
             var removed = oldIds.Except(newIds).Count();
 
@@ -121,20 +143,68 @@ namespace ManageComingSoon.ScheduledTasks
                 "ManageComingSoon: Radarr sync diff — {0} added, {1} removed, {2} unchanged, {3} total.",
                 added, removed, newIds.Intersect(oldIds).Count(), newIds.Count);
 
+            // This task owns keeping the shared placeholder video current —
+            // resolved once per run so GetChannelItems in Cached mode can
+            // just read the path back out of the cache with no filesystem
+            // work of its own.
+            var stubVideoPath = RadarrComingSoonChannel.ResolveStubVideoPath(config, appPaths, logger);
+
             cache.Items = newItems;
+            cache.StubVideoPath = stubVideoPath;
             cache.LastSyncSucceeded = true;
             cache.LastSyncUtc = DateTimeOffset.UtcNow;
             channel.WriteCache(cache);
 
-            // Whether removed items actually disappear from the channel's
-            // Emby-side listing (and whether CanDelete/DeleteItem on the
-            // channel get invoked as part of this) is exactly the open
-            // question RadarrRemovalStrategy exists to help answer. This
-            // task doesn't call DeleteItem itself — see the summary note on
-            // that in chat for why, and what remains genuinely unconfirmed.
-            await channelManager
-                .RefreshChannelContent(channel, maxRefreshLevel: 0, restrictTopLevelFolderId: null, cancellationToken)
-                .ConfigureAwait(false);
+            // Non-fatal by design: the cache write above already succeeded,
+            // which is the actual sync outcome that matters. A failure here
+            // only affects how soon Emby's own listing reflects the change.
+            try
+            {
+                await channelManager
+                    .RefreshChannelContent(channel, maxRefreshLevel: 0, restrictTopLevelFolderId: null, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.ErrorException(
+                    "ManageComingSoon: RefreshChannelContent failed (cache was still updated successfully — this only affects how soon the change is reflected)",
+                    ex);
+            }
+
+            // Confirmed via testing: RefreshChannelContent signals intent but
+            // does NOT itself persist ChannelItemInfo entries into Emby's item
+            // database. Only Emby's own built-in channel-persistence task
+            // does that. Triggering and awaiting it here means one run of our
+            // task does the whole job: Radarr -> cache -> real, queryable
+            // Emby items — no second manually-scheduled task needed.
+            //
+            // Also confirmed via testing: removal is purely implicit — this
+            // task doesn't need to call DeleteItem itself. See the header
+            // note (#6 in RadarrComingSoonChannel) for details.
+            try
+            {
+                var refreshWorker = taskManager.ScheduledTasks
+                    .FirstOrDefault(w => string.Equals(w.ScheduledTask?.Key, RefreshChannelsTaskKey, StringComparison.OrdinalIgnoreCase))
+                    ?? taskManager.ScheduledTasks
+                        .FirstOrDefault(w => string.Equals(w.Name, RefreshChannelsTaskName, StringComparison.OrdinalIgnoreCase));
+
+                if (refreshWorker == null)
+                {
+                    logger.Warn(
+                        "ManageComingSoon: Could not find the built-in channel-refresh task (Key='{0}' / Name='{1}') — items will only be persisted whenever that task next runs on its own schedule.",
+                        RefreshChannelsTaskKey, RefreshChannelsTaskName);
+                }
+                else
+                {
+                    await taskManager.Execute(refreshWorker, new TaskOptions()).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.ErrorException(
+                    "ManageComingSoon: Failed to trigger the built-in channel-refresh task — items may not be persisted until it next runs on its own schedule",
+                    ex);
+            }
         }
     }
 }

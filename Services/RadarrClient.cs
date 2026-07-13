@@ -65,15 +65,15 @@ namespace ManageComingSoon.Services
                 {
                     var jsonText = await reader.ReadToEndAsync().ConfigureAwait(false);
 
-                    logger.Info(
-                        "ManageComingSoon: Radarr response — status {0}, {1} bytes.",
-                        response.StatusCode, jsonText.Length);
-
-                    // Truncated, not full — a movie library's JSON can be large
-                    // and this is only meant for eyeballing shape/errors, not a
-                    // full audit trail.
+                    // Diagnostic detail — Debug only, not needed for normal
+                    // operation now that the earlier integration issues are
+                    // resolved. Truncated since a movie library's JSON can be
+                    // large; this is for eyeballing shape/errors, not an audit
+                    // trail.
                     logger.Debug(
-                        "ManageComingSoon: Radarr response body (first 2000 chars): {0}",
+                        "ManageComingSoon: Radarr response — status {0}, {1} bytes. Body (first 2000 chars): {2}",
+                        response.StatusCode,
+                        jsonText.Length,
                         jsonText.Length > 2000 ? jsonText.Substring(0, 2000) + "...(truncated)" : jsonText);
 
                     var movies = json.DeserializeFromString<List<RadarrMovie>>(jsonText);
@@ -85,6 +85,14 @@ namespace ManageComingSoon.Services
                     }
 
                     logger.Info("ManageComingSoon: Radarr returned {0} movies.", movies.Count);
+
+                    foreach (var m in movies)
+                    {
+                        logger.Debug(
+                            "ManageComingSoon: Radarr movie — TmdbId={0}, Title='{1}', Monitored={2}, HasFile={3}.",
+                            m.TmdbId, m.Title, m.Monitored, m.HasFile);
+                    }
+
                     return movies;
                 }
             }

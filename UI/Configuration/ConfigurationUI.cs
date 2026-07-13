@@ -176,17 +176,42 @@ namespace ManageComingSoon.UI.Configuration
         [AutoPostBack("ConfigurationChanged", nameof(RadarrSyncMode))]
         public RadarrSyncMode RadarrSyncMode { get; set; } = RadarrSyncMode.Cached;
 
-        [DisplayName("Allow removing channel items")]
-        [Description("Lets Emby remove channel items that Radarr no longer reports as coming soon.")]
+        [DisplayName("Allow removing channel items via Emby UI")]
+        [Description("Confirmed not required for normal sync (removal already happens automatically). This only gates user-initiated deletes from Emby's own interface.")]
         [EnabledCondition(nameof(RadarrEnabled), SimpleCondition.IsTrue)]
         [AutoPostBack("ConfigurationChanged", nameof(RadarrEnableDelete))]
         public bool RadarrEnableDelete { get; set; } = false;
 
-        [DisplayName("Removal strategy (for testing)")]
-        [Description("Which mechanism is used when an item falls out of scope. Only relevant while confirming which one actually works.")]
+        [DisplayName("Removal strategy")]
+        [Description("Retained for the user-initiated delete path above; normal Radarr sync removal does not depend on this setting.")]
         [EnabledCondition(nameof(RadarrEnableDelete), SimpleCondition.IsTrue)]
         [AutoPostBack("ConfigurationChanged", nameof(RadarrRemovalStrategy))]
         public RadarrRemovalStrategy RadarrRemovalStrategy { get; set; } = RadarrRemovalStrategy.Implicit;
+
+        [DisplayName("Choose your own Radarr placeholder video file")]
+        [Description(
+            "Path to a video file (mp4, mkv, avi, mov) that Radarr Coming Soon channel items will play. " +
+            "Leave blank to use the default. To change an existing selection, clear this field first.")]
+        [EnabledCondition(nameof(RadarrEnabled), SimpleCondition.IsTrue)]
+        [AutoPostBack("ConfigurationChanged", nameof(RadarrStubVideoPath))]
+        [EditFilePicker]
+        public string RadarrStubVideoPath { get; set; } = string.Empty;
+
+        [Browsable(false)]
+        public GenericListItem RadarrStubVideoStatusItem { get; set; } = new GenericListItem
+        {
+            PrimaryText = "Radarr Placeholder Video File",
+            Status = ItemStatus.Unavailable,
+            Icon = IconNames.video_library,
+            Button1 = new ButtonItem("Clear Selection")
+            {
+                StandardIcon = StandardIcons.Remove,
+                Data1 = "ClearRadarrStubVideo",
+                CommandId = "ClearRadarrStubVideo",
+            }
+        };
+
+        public GenericItemList RadarrStubVideoStatusList => new GenericItemList { RadarrStubVideoStatusItem };
 
         public SpacerItem Spacer6 { get; set; } = new SpacerItem();
 

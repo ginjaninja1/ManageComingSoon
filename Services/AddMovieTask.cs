@@ -51,7 +51,7 @@ namespace ManageComingSoon.Services
     using MediaBrowser.Model.Logging;
     using MediaBrowser.Model.Tasks;
 
-    public class AddMovieTask : IScheduledTask
+    public class AddMovieTask : IScheduledTask, IConfigurableScheduledTask
     {
         private static EmbyLibraryAddService staticLibraryService;
         private static ILogger staticLogger;
@@ -59,6 +59,13 @@ namespace ManageComingSoon.Services
         private static Func<string> staticGetTargetPath;
         private static Func<string> staticGetCustomStubPath;
 
+        public bool IsHidden => true;
+
+        // Keeps the task active so it can still be executed via code
+        public bool IsEnabled => true;
+
+        // Determines whether the execution history is recorded in Emby's task log db
+        public bool IsLogged => true;
         public static void SetDependencies(
             EmbyLibraryAddService libraryService,
             ILogger logger,
@@ -96,6 +103,8 @@ namespace ManageComingSoon.Services
         public string Description => "Managed by the Manage Coming Soon plugin. Do not schedule manually — trigger via the Add Coming Soon tab only.";
         public string Category => "GinjaNinja Tools";
         public string Key => "ManageComingSoon_AddMovie";
+
+        
 
         public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
             => new TaskTriggerInfo[0];
