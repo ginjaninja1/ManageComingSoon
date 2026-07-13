@@ -41,6 +41,7 @@ namespace ManageComingSoon.UI.Configuration
             this.ShowSave = false;
 
             var cfg = this.plugin.Configuration;
+
             ui.TmdbApiKey = cfg.TmdbApiKey;
             ui.MakeLiveMoveToNewLocation = cfg.MakeLiveMoveToNewLocation;
             ui.MakeLiveDeleteStubFile = cfg.MakeLiveDeleteStubFile;
@@ -53,6 +54,18 @@ namespace ManageComingSoon.UI.Configuration
             ui.ComingSoonTagText = string.IsNullOrEmpty(cfg.ComingSoonTagText)
                 ? "Coming Soon"
                 : cfg.ComingSoonTagText;
+
+            // ---- Radarr integration ----
+            // None of this — including the three fields that already existed
+            // on PluginConfiguration before this section was added — was ever
+            // wired up to the UI previously.
+            ui.RadarrEnabled = cfg.RadarrEnabled;
+            ui.RadarrUrl = cfg.RadarrUrl;
+            ui.RadarrApiKey = cfg.RadarrApiKey;
+            ui.RadarrRefreshMinutes = cfg.RadarrRefreshMinutes;
+            ui.RadarrEnableDelete = cfg.RadarrEnableDelete;
+            ui.RadarrSyncMode = cfg.RadarrSyncMode;
+            ui.RadarrRemovalStrategy = cfg.RadarrRemovalStrategy;
 
             // Reflect the persisted (already-validated) stub video state on load.
             // Config only ever holds a valid path or empty — see SaveConfiguration.
@@ -83,6 +96,7 @@ namespace ManageComingSoon.UI.Configuration
                 SetStubVideoStatus(ui,
                     string.Format("Using default {0}", FormatDefaultStubSizeMb()),
                     ItemStatus.Unavailable);
+
                 return Task.FromResult<IPluginUIView>(this);
             }
 
@@ -103,6 +117,15 @@ namespace ManageComingSoon.UI.Configuration
             cfg.ComingSoonTargetKey = ui.ComingSoonTargetKey;
             cfg.MakeLiveTargetKey = ui.MakeLiveTargetKey;
             cfg.EmbyApiKey = (ui.EmbyApiKey ?? string.Empty).Trim();
+
+            // ---- Radarr integration ----------------------------------------------
+            cfg.RadarrEnabled = ui.RadarrEnabled;
+            cfg.RadarrUrl = (ui.RadarrUrl ?? string.Empty).Trim();
+            cfg.RadarrApiKey = (ui.RadarrApiKey ?? string.Empty).Trim();
+            cfg.RadarrRefreshMinutes = ui.RadarrRefreshMinutes > 0 ? ui.RadarrRefreshMinutes : 15;
+            cfg.RadarrEnableDelete = ui.RadarrEnableDelete;
+            cfg.RadarrSyncMode = ui.RadarrSyncMode;
+            cfg.RadarrRemovalStrategy = ui.RadarrRemovalStrategy;
 
             // ---- Coming Soon tag --------------------------------------------------
             // Tag text is always required. If the user clears the field, fall back
@@ -141,21 +164,21 @@ namespace ManageComingSoon.UI.Configuration
 
                 if (!IsValidVideoExtension(ext))
                 {
-                    cfg.ComingSoonStubVideoPath = string.Empty;   // not active — fall back to default
+                    cfg.ComingSoonStubVideoPath = string.Empty; // not active — fall back to default
                     SetStubVideoStatus(ui,
                         "Invalid file type — must be mp4, mkv, avi or mov. Using default.",
                         ItemStatus.Failed);
                 }
                 else if (!File.Exists(path))
                 {
-                    cfg.ComingSoonStubVideoPath = string.Empty;   // not active — fall back to default
+                    cfg.ComingSoonStubVideoPath = string.Empty; // not active — fall back to default
                     SetStubVideoStatus(ui,
                         "File not found. Using default.",
                         ItemStatus.Failed);
                 }
                 else
                 {
-                    cfg.ComingSoonStubVideoPath = path;   // active
+                    cfg.ComingSoonStubVideoPath = path; // active
                     SetStubVideoStatus(ui,
                         string.Format(
                             "Custom Active {0} {1}. Clear the field above to change or remove it.",
@@ -177,7 +200,6 @@ namespace ManageComingSoon.UI.Configuration
             // Direct reference — no string-based lookup, so a rename of the
             // display text can never silently break this again.
             var targetItem = ui.StubVideoStatusItem;
-
             if (targetItem != null)
             {
                 targetItem.SecondaryText = text;
@@ -265,6 +287,7 @@ namespace ManageComingSoon.UI.Configuration
         // Build EditorSelectOption lists from Emby virtual folders
         // Value = "LibraryName|Path" composite key
         // -----------------------------------------------------------------------
+
         private void PopulateLibraryOptions(ConfigurationUI ui)
         {
             var comingSoonOptions = new List<EditorSelectOption>();
@@ -273,6 +296,7 @@ namespace ManageComingSoon.UI.Configuration
             try
             {
                 var virtualFolders = this.libraryManager.GetVirtualFolders();
+
                 foreach (var folder in virtualFolders)
                 {
                     bool isMovieLib = string.IsNullOrEmpty(folder.CollectionType) ||
@@ -286,7 +310,7 @@ namespace ManageComingSoon.UI.Configuration
                     foreach (var loc in folder.Locations)
                     {
                         string key = folder.Name + "|" + loc;
-                        string name = folder.Name + "  \u2192  " + loc;
+                        string name = folder.Name + " \u2192 " + loc;
 
                         if (isMovieLib)
                             comingSoonOptions.Add(new EditorSelectOption(key, name));
@@ -308,6 +332,7 @@ namespace ManageComingSoon.UI.Configuration
         // -----------------------------------------------------------------------
         // Helper: decode a composite key back to its path component
         // -----------------------------------------------------------------------
+
         public static string PathFromKey(string key)
         {
             if (string.IsNullOrEmpty(key)) return string.Empty;

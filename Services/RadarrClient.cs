@@ -44,14 +44,17 @@ namespace ManageComingSoon.Services
                 return null;
             }
 
-            var url = config.RadarrUrl.TrimEnd('/') + "/api/v3/movie";
-            logger.Info("Querying Radarr: {0}", url);
+            var baseUrl = config.RadarrUrl.TrimEnd('/') + "/api/v3/movie";
+            var url = baseUrl + "?apikey=" + Uri.EscapeDataString(config.RadarrApiKey);
+            logger.Info("Querying Radarr: {0}", baseUrl);
 
             var options = new HttpRequestOptions
             {
                 Url = url,
                 CancellationToken = cancellationToken
             };
+            // Sent both ways — some Radarr setups/reverse proxies only
+            // respect one or the other.
             options.RequestHeaders["X-Api-Key"] = config.RadarrApiKey;
 
             try
@@ -61,21 +64,33 @@ namespace ManageComingSoon.Services
                 using (var reader = new StreamReader(stream))
                 {
                     var jsonText = await reader.ReadToEndAsync().ConfigureAwait(false);
+
+                    logger.Info(
+                        "ManageComingSoon: Radarr response — status {0}, {1} bytes.",
+                        response.StatusCode, jsonText.Length);
+
+                    // Truncated, not full — a movie library's JSON can be large
+                    // and this is only meant for eyeballing shape/errors, not a
+                    // full audit trail.
+                    logger.Debug(
+                        "ManageComingSoon: Radarr response body (first 2000 chars): {0}",
+                        jsonText.Length > 2000 ? jsonText.Substring(0, 2000) + "...(truncated)" : jsonText);
+
                     var movies = json.DeserializeFromString<List<RadarrMovie>>(jsonText);
 
                     if (movies == null)
                     {
-                        logger.Warn("Radarr response could not be parsed into a movie list.");
+                        logger.Warn("ManageComingSoon: Radarr response could not be parsed into a movie list. Raw body logged above at Debug level.");
                         return null;
                     }
 
-                    logger.Info("Radarr returned {0} movies.", movies.Count);
+                    logger.Info("ManageComingSoon: Radarr returned {0} movies.", movies.Count);
                     return movies;
                 }
             }
             catch (Exception ex)
             {
-                logger.ErrorException("ManageComingSoon: Radarr call failed for {0}", ex, url);
+                logger.ErrorException("ManageComingSoon: Radarr call failed for {0}", ex, baseUrl);
                 return null;
             }
         }

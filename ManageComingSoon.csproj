@@ -30,6 +30,6 @@
 	</ItemGroup>
 	<!-- Optional: auto-copy the DLL to your plugins folder after build -->
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
-		<Exec Command="xcopy &quot;$(TargetPath)&quot; &quot;%25appdata%25\Emby-Server\programdata\plugins\&quot; /Y&#xD;&#xA;" />
+		<Exec Command="xcopy &quot;$(TargetPath)&quot; &quot;\\x670e\C\Users\Nicholas Bird\AppData\Roaming\Emby-Server\programdata\plugins\&quot; /Y" />
 	</Target>
 </Project>
