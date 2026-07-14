@@ -83,12 +83,20 @@ namespace ManageComingSoon.Model
         // below is inert while this is false.
         public bool RadarrEnabled { get; set; } = false;
 
+        // Display name of the Radarr channel in Emby. Read by
+        // RadarrComingSoonChannel.Name. Changing this creates a new Channel
+        // DB row in Emby (channels are keyed by Name) and orphans the old
+        // one — see Project.md roadmap item 2 for the orphan-cleanup design,
+        // not yet implemented pending a probe.
+        public string RadarrChannelName { get; set; } = "Radarr Coming Soon";
+
         // Gates whether the sync is permitted to remove channel items at
-        // all, independent of RadarrSyncMode/RadarrRemovalStrategy. This is
-        // deliberately a separate setting from any other "enable delete"
-        // flag elsewhere in the plugin (e.g. MakeLiveDeleteStubFile) — the
-        // two are unrelated: one is a filesystem stub delete, this one is a
-        // channel-item removal with no filesystem interaction at all.
+        // all, independent of RadarrSyncMode/RadarrRemovalStrategy. Kept on
+        // config for the ISupportsDelete/CanDelete code path (user-initiated
+        // deletes from Emby's own UI) even though it is deliberately no
+        // longer exposed in ConfigurationUI — confirmed not needed for
+        // normal add/remove sync, which relies purely on implicit
+        // reconciliation. See Project.md roadmap item 7.
         public bool RadarrEnableDelete { get; set; } = false;
 
         // Cached vs Live — see RadarrSyncMode doc comments above. Defaulting
@@ -96,11 +104,10 @@ namespace ManageComingSoon.Model
         // both are wired up so the two can be compared directly.
         public RadarrSyncMode RadarrSyncMode { get; set; } = RadarrSyncMode.Cached;
 
-        // Implicit removal is confirmed sufficient on its own (Emby's built-in
-        // channel-refresh reconciles purely from what GetChannelItems returns
-        // each run) — this flag is kept as a safety toggle for the
-        // user-initiated delete path (ISupportsDelete/CanDelete), not because
-        // it's required for normal add/remove sync to work.
+        // Retained on config for the same reason as RadarrEnableDelete above
+        // (ISupportsDelete safety toggle) but no longer exposed in
+        // ConfigurationUI — implicit removal alone is confirmed sufficient
+        // for normal sync. See Project.md roadmap item 7.
         public RadarrRemovalStrategy RadarrRemovalStrategy { get; set; } = RadarrRemovalStrategy.Implicit;
 
         // Same semantics as ComingSoonStubVideoPath: empty = use the plugin's
@@ -109,5 +116,11 @@ namespace ManageComingSoon.Model
         // points at for playback, since channel items have no folder of
         // their own to hold a per-item stub copy.
         public string RadarrStubVideoPath { get; set; } = string.Empty;
+
+        // Fixed identity marker applied to the Channel BaseItem, independent of
+        // RadarrChannelName. Survives a channel rename, letting the sync task
+        // find "this plugin's channel" even after the Name-keyed DB row changes —
+        // and flag any other Channel item carrying this tag as a stale orphan.
+        public string RadarrChannelIdentityTag { get; set; } = "ManageComingSoon:RadarrChannel";
     }
 }

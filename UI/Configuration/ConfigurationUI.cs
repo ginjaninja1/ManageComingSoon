@@ -137,9 +137,6 @@ namespace ManageComingSoon.UI.Configuration
         public SpacerItem Spacer5 { get; set; } = new SpacerItem();
 
         // ---- Radarr integration --------------------------------------------------
-        // Previously RadarrUrl/RadarrApiKey/RadarrRefreshMinutes existed on
-        // PluginConfiguration but were never surfaced here at all — this whole
-        // section (including those three original fields) is new to the UI.
 
         public CaptionItem CaptionRadarr { get; set; } =
             new CaptionItem("Radarr Coming Soon Channel");
@@ -148,6 +145,12 @@ namespace ManageComingSoon.UI.Configuration
         [Description("Master switch. Everything below only applies when this is on.")]
         [AutoPostBack("ConfigurationChanged", nameof(RadarrEnabled))]
         public bool RadarrEnabled { get; set; } = false;
+
+        [DisplayName("Channel name")]
+        [Description("Display name of the Radarr channel in Emby. Changing this creates a new channel entry in Emby and orphans the old one.")]
+        [EnabledCondition(nameof(RadarrEnabled), SimpleCondition.IsTrue)]
+        [AutoPostBack("ConfigurationChanged", nameof(RadarrChannelName))]
+        public string RadarrChannelName { get; set; } = "Radarr Coming Soon";
 
         [DisplayName("Radarr URL")]
         [Description("e.g. http://127.0.0.1:7878")]
@@ -160,6 +163,12 @@ namespace ManageComingSoon.UI.Configuration
         [EnabledCondition(nameof(RadarrEnabled), SimpleCondition.IsTrue)]
         [AutoPostBack("ConfigurationChanged", nameof(RadarrApiKey))]
         public string RadarrApiKey { get; set; } = string.Empty;
+
+        [DisplayName("Channel identity tag")]
+        [Description("Internal marker tag used to find this channel's database entry across renames, and to detect orphaned entries left behind by a previous name.")]
+        [EnabledCondition(nameof(RadarrEnabled), SimpleCondition.IsTrue)]
+        [AutoPostBack("ConfigurationChanged", nameof(RadarrChannelIdentityTag))]
+        public string RadarrChannelIdentityTag { get; set; } = "ManageComingSoon:RadarrChannel";
 
         [DisplayName("Sync interval (minutes)")]
         [Description("How often the Cached-mode scheduled task queries Radarr")]
@@ -175,18 +184,6 @@ namespace ManageComingSoon.UI.Configuration
         [EnabledCondition(nameof(RadarrEnabled), SimpleCondition.IsTrue)]
         [AutoPostBack("ConfigurationChanged", nameof(RadarrSyncMode))]
         public RadarrSyncMode RadarrSyncMode { get; set; } = RadarrSyncMode.Cached;
-
-        [DisplayName("Allow removing channel items via Emby UI")]
-        [Description("Confirmed not required for normal sync (removal already happens automatically). This only gates user-initiated deletes from Emby's own interface.")]
-        [EnabledCondition(nameof(RadarrEnabled), SimpleCondition.IsTrue)]
-        [AutoPostBack("ConfigurationChanged", nameof(RadarrEnableDelete))]
-        public bool RadarrEnableDelete { get; set; } = false;
-
-        [DisplayName("Removal strategy")]
-        [Description("Retained for the user-initiated delete path above; normal Radarr sync removal does not depend on this setting.")]
-        [EnabledCondition(nameof(RadarrEnableDelete), SimpleCondition.IsTrue)]
-        [AutoPostBack("ConfigurationChanged", nameof(RadarrRemovalStrategy))]
-        public RadarrRemovalStrategy RadarrRemovalStrategy { get; set; } = RadarrRemovalStrategy.Implicit;
 
         [DisplayName("Choose your own Radarr placeholder video file")]
         [Description(

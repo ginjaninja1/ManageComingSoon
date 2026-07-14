@@ -49,26 +49,23 @@ Full end-to-end pipeline confirmed working against a real Emby 4.10 server:
 
 The following items are outstanding, in rough priority order:
 
-**1. Channel name configurable**
-Add `RadarrChannelName` to `PluginConfiguration` (default `"Radarr Coming Soon"`). The `IChannel.Name` getter reads from config. Surface in UI under the Radarr section.
 
 **2. Channel tagging + orphan cleanup**
 When Emby stores a channel it keys it by `Name` in its database (confirmed: `Channel 1358179 Radarr Coming Soon` at startup). Renaming the channel creates a new DB row and orphans the old one. Strategy: tag every channel item with a fixed plugin-identity tag (e.g. `"Created by ManageComingSoon"`) at creation time. On each sync run, probe for any channel DB entries carrying that tag whose name does not match the current configured channel name — these are stale orphans and should be cleaned. Whether Emby auto-cleans these or requires explicit action **needs a probe to confirm** before implementing the cleanup. `ILibraryManager` is likely the right interface for the orphan query.
-
+now has a real IChannelManager.DeleteItem lead to test and the chanel has an identifyable tag.
 **3. Radarr as a known Emby provider**
 `RadarrId` is stored in `ProviderIds` but Emby does not recognise `"RadarrId"` as a known provider so it does not surface in the metadata UI. **Needs a probe**: investigate whether Emby allows plugins to register custom provider names (likely via some registration interface or config at startup). If possible, registering `"Radarr"` as a known provider would make the Radarr ID visible in the metadata editor. If not possible, document it as a known limitation.
 
-**4. Channel image**
-`GetSupportedChannelImages()` currently returns an empty array and `GetChannelImage()` returns null. To give the channel a default image, return `ImageType.Primary` from `GetSupportedChannelImages()` and return a `DynamicImageResponse` built from the plugin's embedded `thumb.png` (same resource already used by `ManageComingSoonPlugin.GetThumbImage()`). **`DynamicImageResponse`'s actual constructor/property shape is unconfirmed** — `HasImage` does not exist (caused a compile error). Needs class inspection before implementing.
 
-**5. "Coming soon" rules surface in config**
+
+## Future improvements ignore for now
+
+### "Coming soon" rules surface in config**
 Currently the only rule is `Monitored=true && HasFile=false` (hardcoded in `RadarrClient.GetComingSoonMoviesAsync`). In future, users may want to filter by genre, release window, minimum rating, etc. Design a configurable rules surface in the UI and a corresponding filter layer in the Radarr client. Out of scope for current iteration.
 
-**6. Live sync mode**
+### Live sync mode**
 `RadarrSyncMode.Live` is implemented (channel calls Radarr directly on every `GetChannelItems` request) but has not been tested. Cached mode is confirmed working and is the default. Live mode is lower priority; test when the above items are stable.
 
-**7. Remove `RadarrEnableDelete` and `RadarrRemovalStrategy` from UI**
-Confirmed not needed for normal operation. `ISupportsDelete`/`CanDelete` are kept in code only as a safety toggle for user-initiated deletes from Emby's own UI. Remove both fields from `ConfigurationUI.cs` and `ConfigurationPageView.cs`. `RadarrEnableDelete` can remain on `PluginConfiguration` (defaulting to false) for the code path, just not exposed in UI.
 
 ---
 
@@ -187,6 +184,43 @@ int? Limit { get; set; }
 
 `ChannelParentalRating.GeneralAudience` — confirmed member name.
 
+Roadmap item 4 (Channel image) — DONE.
+Confirmed working solution, minimal form:
+csharpprivate void ReapplyChannelImage(BaseItem item)
+{
+    if (item.HasImage(ImageType.Primary))
+    {
+        return; // only ever needs to run once per item
+    }
+
+    var imagePath = ResolveChannelImagePath(); // extract embedded thumb.png to disk once, cache path thereafter
+    var imageSize = imageProcessor.GetImageSize(imagePath); // IImageProcessor — real Width/Height required, zero values silently fail to render
+
+    item.SetImage(new ItemImageInfo
+    {
+        Path = imagePath,
+        Type = ImageType.Primary,
+        DateModified = DateTimeOffset.UtcNow,
+        Width = (int)imageSize.Width,
+        Height = (int)imageSize.Height
+    }, 0);
+
+    libraryManager.UpdateImages(item); // sufficient alone — no UpdateToRepository/UpdateItem or IProviderManager.OnRefreshComplete needed
+}
+Key findings for evidence log:
+
+IChannel.GetChannelImage/GetSupportedChannelImages are called by Emby exactly once, at the moment "Refresh Internet Channels" first persists a new Channel DB row (keyed by Name). Never re-invoked for an existing row — confirmed by direct test (deleted image via UI, re-browsed, zero calls).
+Renaming the channel (RadarrChannelName) forces a new DB row and orphans the old one — same mechanism, now with a live orphan example seen in testing.
+ItemImageInfo.Width/Height must be real values from IImageProcessor.GetImageSize(path), not left at 0 — suspected (not fully isolated) to be why initial attempts didn't render despite the DB record looking correct in Edit Images.
+Setting BaseItem.ImageInfos via SetImage alone does not make Emby's live web API serve the image — confirmed via direct test: DB/Edit-Images screen showed it correctly, but the running server didn't serve it until an unrelated full restart.
+ILibraryManager.UpdateImages(BaseItem) alone is sufficient to invalidate/propagate to the live server without a restart. BaseItem.UpdateToRepository(ItemUpdateType.ImageUpdate) and IProviderManager.OnRefreshComplete(item, collectionFolders) are not required in addition — confirmed by direct isolation test.
+item.HasImage(ImageType.Primary) is the correct guard to make this idempotent/cheap — avoids re-running on every sync.
+Channel.CanDelete() is hardcoded false — orphaned Channel rows cannot be removed via the standard ILibraryManager.DeleteItem path. IChannelManager.DeleteItem(BaseItem) is an unexplored, more promising lead for roadmap item #2 (orphan cleanup) — not yet tested.
+RadarrChannelIdentityTag (fixed tag, independent of RadarrChannelName) is implemented and confirmed working — survives renames, correctly distinguishes current channel from orphans via InternalItemsQuery.Tags + Name matching.
+
+
+
+
 ---
 
 # AI Directives
@@ -196,5 +230,4 @@ int? Limit { get; set; }
 - Don't display code blocks unless the intention is for the operator to implement them.
 - Don't code immediately — clarify understanding, ask questions, propose approach and await approval to code.
 - Propose before coding is a firm discipline. Never start writing code until the approach has been explicitly approved.
-- Never log API keys, tokens, or secrets in plaintext.
 - When a Radarr call fails (null result), leave cache untouched — never treat failure as "zero movies".

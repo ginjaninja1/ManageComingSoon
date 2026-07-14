@@ -59,12 +59,16 @@ namespace ManageComingSoon.UI.Configuration
 
             // ---- Radarr integration ----
             ui.RadarrEnabled = cfg.RadarrEnabled;
+            ui.RadarrChannelName = string.IsNullOrEmpty(cfg.RadarrChannelName)
+                ? "Radarr Coming Soon"
+                : cfg.RadarrChannelName;
+            ui.RadarrChannelIdentityTag = string.IsNullOrEmpty(cfg.RadarrChannelIdentityTag)
+                ? "ManageComingSoon:RadarrChannel"
+                : cfg.RadarrChannelIdentityTag;
             ui.RadarrUrl = cfg.RadarrUrl;
             ui.RadarrApiKey = cfg.RadarrApiKey;
             ui.RadarrRefreshMinutes = cfg.RadarrRefreshMinutes;
-            ui.RadarrEnableDelete = cfg.RadarrEnableDelete;
             ui.RadarrSyncMode = cfg.RadarrSyncMode;
-            ui.RadarrRemovalStrategy = cfg.RadarrRemovalStrategy;
             ui.RadarrStubVideoPath = cfg.RadarrStubVideoPath;
 
             // Reflect the persisted (already-validated) stub video state on load.
@@ -137,12 +141,33 @@ namespace ManageComingSoon.UI.Configuration
 
             // ---- Radarr integration ----------------------------------------------
             cfg.RadarrEnabled = ui.RadarrEnabled;
+
+            string channelName = (ui.RadarrChannelName ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(channelName))
+            {
+                cfg.RadarrChannelName = "Radarr Coming Soon";
+                ui.RadarrChannelName = "Radarr Coming Soon";
+            }
+            else
+            {
+                cfg.RadarrChannelName = channelName;
+            }
+
+            string identityTag = (ui.RadarrChannelIdentityTag ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(identityTag))
+            {
+                cfg.RadarrChannelIdentityTag = "ManageComingSoon:RadarrChannel";
+                ui.RadarrChannelIdentityTag = "ManageComingSoon:RadarrChannel";
+            }
+            else
+            {
+                cfg.RadarrChannelIdentityTag = identityTag;
+            }
+
             cfg.RadarrUrl = (ui.RadarrUrl ?? string.Empty).Trim();
             cfg.RadarrApiKey = (ui.RadarrApiKey ?? string.Empty).Trim();
             cfg.RadarrRefreshMinutes = ui.RadarrRefreshMinutes > 0 ? ui.RadarrRefreshMinutes : 15;
-            cfg.RadarrEnableDelete = ui.RadarrEnableDelete;
             cfg.RadarrSyncMode = ui.RadarrSyncMode;
-            cfg.RadarrRemovalStrategy = ui.RadarrRemovalStrategy;
 
             // ---- Coming Soon tag --------------------------------------------------
             // Tag text is always required. If the user clears the field, fall back

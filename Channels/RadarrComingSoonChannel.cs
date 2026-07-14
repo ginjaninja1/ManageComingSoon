@@ -32,6 +32,7 @@ namespace ManageComingSoon.Channels
     using ManageComingSoon.Services;
     using ManageComingSoon.Services.Models;
     using MediaBrowser.Common.Configuration;
+    using MediaBrowser.Common.Plugins;
     using MediaBrowser.Controller.Channels;
     using MediaBrowser.Controller.Entities;
     using MediaBrowser.Controller.Providers;
@@ -83,7 +84,7 @@ namespace ManageComingSoon.Channels
             this.logger = logger;
         }
 
-        public string Name => "Radarr Coming Soon";
+        public string Name => ManageComingSoonPlugin.Instance.Configuration.RadarrChannelName;
 
         public string Description => "Movies currently monitored in Radarr that have not yet been downloaded.";
 
@@ -91,21 +92,34 @@ namespace ManageComingSoon.Channels
 
         public IEnumerable<ImageType> GetSupportedChannelImages()
         {
-            return Array.Empty<ImageType>();
+            this.logger.Info("RadarrComingSoonChannel: GetSupportedChannelImages called");
+            return new List<ImageType> { ImageType.Primary };
         }
 
         public Task<DynamicImageResponse> GetChannelImage(ImageType type, CancellationToken cancellationToken)
         {
-            // GetSupportedChannelImages() returns an empty list, so Emby
-            // should never actually call this.
-            return Task.FromResult<DynamicImageResponse>(null);
+            var pluginType = typeof(ManageComingSoonPlugin);
+            var resourceName = pluginType.Namespace + ".thumb.png";
+            var stream = pluginType.Assembly.GetManifestResourceStream(resourceName);
+
+            if (stream == null)
+            {
+                this.logger.Info("RadarrComingSoonChannel: GetChannelImage FAILED to load resource '{0}' from assembly '{1}'", resourceName, pluginType.Assembly.FullName);
+            }
+            else
+            {
+                this.logger.Info("RadarrComingSoonChannel: GetChannelImage loaded resource '{0}' ({1} bytes)", resourceName, stream.Length);
+            }
+
+            return Task.FromResult(new DynamicImageResponse
+            {
+                Format = ImageFormat.Png,
+                Protocol = MediaProtocol.File,
+                Stream = stream
+            });
         }
 
-        // Suspected actual mechanism for channel playback: Emby's
-        // PlaybackInfo request appears to call this at request time rather
-        // than reading ChannelItemInfo.MediaSources populated up front in
-        // GetChannelItems. UNCONFIRMED until tested — this is the first
-        // thing to check if "No compatible streams" persists.
+
         public Task<IEnumerable<MediaSourceInfo>> GetChannelItemMediaInfo(string id, CancellationToken cancellationToken)
         {
             var config = ManageComingSoonPlugin.Instance.Configuration;
