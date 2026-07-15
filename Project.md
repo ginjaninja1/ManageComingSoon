@@ -17,11 +17,13 @@ Three tabs: **Add Movie**, **Make Live**, **Config**. **Add Movie**: search TMDB
 
 # Project Roadmap
 
-### Disable Radarr should remove the Radarr channel
+### Disable/Enable Radarr
 Enable should enable the channel, disable should remove it. This is a simple toggle in the plugin config.
 
 ### "Coming soon" rules surface in config**
-Currently the only rule is `Monitored=true && HasFile=false` (hardcoded in `RadarrClient.GetComingSoonMoviesAsync`). In future, users may want to filter by genre, release window, minimum rating, etc. Design a configurable rules surface in the UI and a corresponding filter layer in the Radarr client. Out of scope for current iteration.
+Currently the only rule is `Monitored=true && HasFile=false` (hardcoded in `RadarrClient.GetComingSoonMoviesAsync`). In future, users may want to filter by genre, release window, minimum rating, etc. Design a configurable rules surface in the UI and a corresponding filter layer in the Radarr client.
+We need to read the json respone to identify the fields that are available for filtering. The rules surface should allow users to select which fields to filter on and specify the desired values.
+The generic UI does not have a control for this type of ui, will need you to build in html/js/css. The rules surface should be able to handle multiple rules and combine them with AND/OR logic. It should show available rules and implemented rule. Users should be able drag and drop to reorder rules, and remove rules. The rules surface should also allow users to save and load rule sets.
 
 ### Default name for Radarr channel should be "Raddarr Coming Soon"
 ---
