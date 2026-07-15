@@ -28,12 +28,6 @@ namespace ManageComingSoon.Services
             this.logger = logger;
         }
 
-        // Returns null (not an empty list) on any failure to reach/parse
-        // Radarr's response — this distinction matters. Callers must treat
-        // null as "sync skipped, leave existing state untouched" and must
-        // NEVER treat it the same as an empty-but-successful result, which
-        // would otherwise look identical to "Radarr says nothing qualifies
-        // any more" and cause everything to be wrongly removed.
         private async Task<List<RadarrMovie>> GetAllMoviesAsync(
             PluginConfiguration config,
             CancellationToken cancellationToken)
@@ -53,8 +47,6 @@ namespace ManageComingSoon.Services
                 Url = url,
                 CancellationToken = cancellationToken
             };
-            // Sent both ways — some Radarr setups/reverse proxies only
-            // respect one or the other.
             options.RequestHeaders["X-Api-Key"] = config.RadarrApiKey;
 
             try
@@ -65,16 +57,11 @@ namespace ManageComingSoon.Services
                 {
                     var jsonText = await reader.ReadToEndAsync().ConfigureAwait(false);
 
-                    // Diagnostic detail — Debug only, not needed for normal
-                    // operation now that the earlier integration issues are
-                    // resolved. Truncated since a movie library's JSON can be
-                    // large; this is for eyeballing shape/errors, not an audit
-                    // trail.
                     logger.Debug(
-                        "ManageComingSoon: Radarr response — status {0}, {1} bytes. Body (first 2000 chars): {2}",
+                        "ManageComingSoon: Radarr response — status {0}, {1} bytes. Body (first 10000 chars): {2}",
                         response.StatusCode,
                         jsonText.Length,
-                        jsonText.Length > 2000 ? jsonText.Substring(0, 2000) + "...(truncated)" : jsonText);
+                        jsonText.Length > 10000 ? jsonText.Substring(0, 10000) + "...(truncated)" : jsonText);
 
                     var movies = json.DeserializeFromString<List<RadarrMovie>>(jsonText);
 
@@ -89,8 +76,8 @@ namespace ManageComingSoon.Services
                     foreach (var m in movies)
                     {
                         logger.Debug(
-                            "ManageComingSoon: Radarr movie — TmdbId={0}, Title='{1}', Monitored={2}, HasFile={3}.",
-                            m.TmdbId, m.Title, m.Monitored, m.HasFile);
+                            "ManageComingSoon: Radarr movie — TmdbId={0}, TitleSlug={1}, Title='{2}', Monitored={3}, HasFile={4}.",
+                            m.TmdbId, m.TitleSlug, m.Title, m.Monitored, m.HasFile);
                     }
 
                     return movies;
@@ -103,9 +90,6 @@ namespace ManageComingSoon.Services
             }
         }
 
-        // Existing behaviour, unchanged: monitored + no file yet, sorted by
-        // title. Kept exactly as-is since other parts of the plugin may
-        // already depend on this specific method name/behaviour.
         public async Task<IReadOnlyList<RadarrMovie>> GetMissingMoviesAsync(
             PluginConfiguration config,
             CancellationToken cancellationToken)
@@ -120,14 +104,6 @@ namespace ManageComingSoon.Services
                 .ToList();
         }
 
-        // "Coming soon" for the Radarr channel: monitored, not yet
-        // fulfilled by Radarr. Confirmed this is the exact same definition
-        // as "missing" above — deliberately not duplicating the filter
-        // logic, just giving the channel/sync code a name that matches its
-        // own vocabulary. Returns null (not empty) on failure — see
-        // GetAllMoviesAsync's doc comment; the scheduled task and the
-        // channel's Live-mode path must both branch on null explicitly and
-        // must never treat it as "zero movies qualify".
         public async Task<IReadOnlyList<RadarrMovie>> GetComingSoonMoviesAsync(
             PluginConfiguration config,
             CancellationToken cancellationToken)

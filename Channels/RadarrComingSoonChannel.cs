@@ -6,10 +6,7 @@
 //   3. CONFIRMED — namespaces/enum members (ChannelItemInfo, ChannelItemType,
 //      ChannelParentalRating.GeneralAudience, ChannelMediaType.Video,
 //      ChannelMediaContentType.Movie) all compile and behave as expected.
-//   4. STILL UNCONFIRMED — ProviderIdDictionary key strings ("Tmdb"/"Imdb").
-//      Structurally safe either way (plain string-keyed dictionary), just
-//      unconfirmed whether Emby's own providers recognize these exact names
-//      for cross-referencing.
+//   4. CONFIRMED — ProviderIds keys "Tmdb"/"Imdb" recognized by Emby's UI.
 //   5. STILL UNCONFIRMED — IApplicationPaths.DataPath as the cache/stub file
 //      location; swap for an existing storage convention in this codebase
 //      if one exists.
@@ -19,12 +16,21 @@
 //      ISupportsDelete were never observed firing during a confirmed
 //      removal — kept only as a safety toggle for the user-initiated
 //      delete-from-UI path, not because normal sync depends on it.
-//   9. NEW, UNCONFIRMED — playback still failed with MediaSources populated
-//      directly on ChannelItemInfo alone ("No compatible streams"). Now also
-//      implementing IRequiresMediaInfoCallback (an interface pasted at the
-//      very start of this conversation but not used until now) — suspected
-//      to be the actual mechanism Emby calls at playback time. Both paths
-//      build via the same BuildMediaSource helper. Needs live testing.
+//   9. CONFIRMED — IRequiresMediaInfoCallback.GetChannelItemMediaInfo is the
+//      actual mechanism Emby calls at playback time.
+//  10. NEW — Channel item identity (ChannelItemInfo.Id) is now keyed off
+//      Radarr's TitleSlug rather than TmdbId. Confirmed via live testing
+//      that Emby writes ProviderIds once at first item creation and does
+//      NOT rewrite them on subsequent syncs of an already-existing item
+//      (same "write once" pattern as GetChannelImage). Since TitleSlug is
+//      assumed to be Radarr's permanent, never-changing identity, keying
+//      item identity off it means: if it ever did change, the old item
+//      would implicitly disappear (no longer returned by GetChannelItems)
+//      and a fresh item would be created with correct, current ProviderIds
+//      — no stale-data problem, because it's a genuinely new item rather
+//      than a stale refresh of an old one. If TitleSlug is ever empty, the
+//      item is dropped from the channel entirely (logged) rather than
+//      risking duplicate/orphaned entries under a different identity.
 
 namespace ManageComingSoon.Channels
 {
@@ -119,7 +125,6 @@ namespace ManageComingSoon.Channels
             });
         }
 
-
         public Task<IEnumerable<MediaSourceInfo>> GetChannelItemMediaInfo(string id, CancellationToken cancellationToken)
         {
             var config = ManageComingSoonPlugin.Instance.Configuration;
@@ -202,7 +207,11 @@ namespace ManageComingSoon.Channels
             var channelItems = new List<ChannelItemInfo>(sourceItems.Count);
             foreach (var item in sourceItems)
             {
-                channelItems.Add(await ToChannelItemInfoAsync(item, config, stubVideoPath, cancellationToken).ConfigureAwait(false));
+                var info = await ToChannelItemInfoAsync(item, config, stubVideoPath, cancellationToken).ConfigureAwait(false);
+                if (info != null)
+                {
+                    channelItems.Add(info);
+                }
             }
 
             logger.Info("ManageComingSoon: GetChannelItems ({0} mode) returning {1} item(s). stubVideoPath='{2}'.", config.RadarrSyncMode, channelItems.Count, stubVideoPath);
@@ -242,7 +251,7 @@ namespace ManageComingSoon.Channels
         public Task DeleteItem(string id, CancellationToken cancellationToken)
         {
             var cache = ReadCache();
-            var removed = cache.Items.RemoveAll(i => BuildItemId(i.TmdbId) == id);
+            var removed = cache.Items.RemoveAll(i => BuildItemId(i.TitleSlug) == id);
 
             if (removed > 0)
             {
@@ -303,15 +312,6 @@ namespace ManageComingSoon.Channels
         // cache) and this class directly (Live mode: no cache to rely on).
         // -----------------------------------------------------------------
 
-        /// <summary>
-        /// Resolves the on-disk path of the placeholder video every channel
-        /// item's MediaSources should point at. Prefers the user's configured
-        /// RadarrStubVideoPath if it's set and valid; otherwise extracts the
-        /// plugin's embedded default stub to a persistent location once (and
-        /// reuses it thereafter — no repeated extraction). Returns empty
-        /// string if nothing usable could be resolved (channel items then
-        /// simply have no MediaSources, matching prior behavior).
-        /// </summary>
         internal static string ResolveStubVideoPath(PluginConfiguration config, IApplicationPaths appPaths, ILogger logger)
         {
             var configuredPath = (config.RadarrStubVideoPath ?? string.Empty).Trim();
@@ -373,7 +373,14 @@ namespace ManageComingSoon.Channels
         // Mapping helpers
         // -----------------------------------------------------------------
 
-        private static string BuildItemId(int tmdbId) => IdPrefix + tmdbId;
+        // TitleSlug is Radarr's assumed permanent, never-changing primary
+        // identity for a movie (see status header note #10). Item identity
+        // is keyed off it rather than TmdbId so that stale ProviderIds
+        // (which Emby only writes once, at first item creation) can never
+        // persist under a "same" item — if the slug ever changed, the old
+        // item id would vanish from GetChannelItems and a fresh item would
+        // be created instead.
+        private static string BuildItemId(string titleSlug) => IdPrefix + titleSlug;
 
         private static RadarrChannelCacheItem ToCacheItem(Services.Models.RadarrMovie movie)
         {
@@ -386,6 +393,7 @@ namespace ManageComingSoon.Channels
                 RadarrId = movie.Id,
                 TmdbId = movie.TmdbId,
                 ImdbId = movie.ImdbId,
+                TitleSlug = movie.TitleSlug,
                 Title = movie.Title,
                 OriginalTitle = movie.OriginalTitle,
                 Year = movie.Year,
@@ -400,6 +408,18 @@ namespace ManageComingSoon.Channels
             string stubVideoPath,
             CancellationToken cancellationToken)
         {
+            // TitleSlug is treated as Radarr's permanent primary identity for
+            // this channel item. If it's ever missing, we can't safely key
+            // the item's identity — drop it rather than risk
+            // duplicate/orphaned channel entries under some other key.
+            if (string.IsNullOrEmpty(item.TitleSlug))
+            {
+                logger.Warn(
+                    "ManageComingSoon: Radarr item '{0}' (TmdbId={1}) has no TitleSlug — dropping from channel.",
+                    item.Title, item.TmdbId);
+                return null;
+            }
+
             var posterUrl = item.PosterUrl;
 
             // Only fall back to TMDB when Radarr genuinely didn't give us a
@@ -418,7 +438,7 @@ namespace ManageComingSoon.Channels
                 }
             }
 
-            var itemId = BuildItemId(item.TmdbId);
+            var itemId = BuildItemId(item.TitleSlug);
 
             var info = new ChannelItemInfo
             {
@@ -433,19 +453,19 @@ namespace ManageComingSoon.Channels
                 ImageUrl = posterUrl
             };
 
-            // STILL UNCONFIRMED (#4) — see header note.
             if (item.TmdbId > 0)
                 info.ProviderIds["Tmdb"] = item.TmdbId.ToString();
             if (!string.IsNullOrEmpty(item.ImdbId))
                 info.ProviderIds["Imdb"] = item.ImdbId;
-            if (item.RadarrId > 0)
-                info.ProviderIds["RadarrId"] = item.RadarrId.ToString();
 
-            // ASSUMPTION #9 — MediaSourceInfo's exact member set/namespace is
-            // a best guess (MediaBrowser.Model.Dto / MediaBrowser.Model.MediaInfo),
-            // not confirmed against this SDK version. Populated here too as a
-            // secondary hint, though GetChannelItemMediaInfo (see above) is the
-            // suspected actual mechanism Emby uses at playback time.
+            // Surfaced in Emby's UI via RadarrExternalId (IExternalId),
+            // whose UrlFormatString builds a clickable link back to this
+            // movie's page in the configured Radarr instance.
+            info.ProviderIds["RadarrId"] = item.TitleSlug;
+
+            // ASSUMPTION — MediaSourceInfo populated here too as a secondary
+            // hint, though GetChannelItemMediaInfo (see above) is the
+            // confirmed actual mechanism Emby uses at playback time.
             if (!string.IsNullOrEmpty(stubVideoPath))
             {
                 info.MediaSources = new List<MediaSourceInfo> { BuildMediaSource(itemId, stubVideoPath) };

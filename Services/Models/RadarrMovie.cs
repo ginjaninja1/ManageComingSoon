@@ -22,6 +22,8 @@ namespace ManageComingSoon.Services.Models
 
         public string ImdbId { get; set; }
 
+        public string TitleSlug { get; set; }
+
         public string Certification { get; set; }
 
         public long? Runtime { get; set; }
