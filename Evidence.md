@@ -176,3 +176,75 @@ public BaseItem Parent { get; set; }  // setter also populates ParentIds interna
 public long[] ParentIds { get; set; }
 Parent is the simpler way to scope a query to children of a specific BaseItem (e.g. Movie items under a Channel) — confirmed working via the post-sync diagnostic query in this session.
 
+## Channel Registration Cannot Be Conditional at Runtime
+
+`GetExports<T>(bool manageLiftime, IList<Type> excludeTypes)` (Emby's internal
+MEF-style export scanner, confirmed via ILSpy decompilation of the internal
+export/composition assembly) only supports excluding types from a caller-
+supplied list at the call site — there is no predicate, instance check, or
+config lookup available to the exported type itself. `CreateInstanceSafe` is
+called unconditionally for every type found implementing the requested
+interface. This means an `IChannel` implementation (or `IScheduledTask`, same
+mechanism) cannot opt out of being registered based on its own runtime state
+(e.g. a plugin config flag) — registration is decided purely by "does this
+type exist in a loaded assembly," at server startup, before any plugin
+config is even read. The only way to prevent registration is for the type
+not to exist in the assembly at all (conditional compilation / separate
+optional DLL) — not achievable via a runtime toggle.
+
+## Channel Entities Cannot Be Hidden or Kept Deleted While the Plugin Is Loaded
+
+Confirmed via direct live testing (see chat history) while investigating a
+"disable this channel" feature:
+
+- `IChannelManager.DeleteItem(BaseItem item)` is NOT a generic "delete this
+  BaseItem" call, despite the name. Decompiled body:
+```csharp
+  public Task DeleteItem(BaseItem item)
+  {
+      Channel channelFromItem = GetChannelFromItem(item);
+      if (channelFromItem == null) return Task.CompletedTask;
+      if (!(GetChannelProvider(channelFromItem) is ISupportsDelete supportsDelete))
+          return Task.CompletedTask;
+      return supportsDelete.DeleteItem(item.ExternalId, CancellationToken.None);
+  }
+```
+  It treats `item` as **content belonging to a channel** and routes to that
+  channel's own `ISupportsDelete.DeleteItem`. Calling it against the Channel
+  BaseItem itself silently no-ops (`GetChannelFromItem` returns null for a
+  Channel, since a Channel isn't "in" a channel).
+
+- The real generic BaseItem-removal path is `ILibraryManager.DeleteItem(item,
+  DeleteOptions)`. Confirmed working directly against a Channel BaseItem —
+  goes straight to `ItemRepository.DeleteItems`, fires `ItemRemoved`, deletes
+  the item's metadata folder. `DeleteFileLocation = false` is sufficient
+  since a Channel has no on-disk path.
+
+- **However**: the deleted Channel row does NOT stay deleted. Emby's own
+  built-in "Refresh Internet Channels" scheduled task (`RefreshInternetChannels`)
+  re-registers a DB row for every currently-exported `IChannel` on every run,
+  completely independent of any plugin-level enabled/disabled config — it has
+  no concept of "disabled." Confirmed via direct test: delete the Channel
+  row, run "Refresh Internet Channels" again (on its own trigger schedule, a
+  manual trigger, or via our own sync task if it ever calls it), and the row
+  reappears — same `Guid` (name-derived), new `InternalId` (fresh DB row).
+
+- **Also confirmed**: an empty channel (zero content items) is NOT auto-hidden
+  by Emby's Channels UI. Zero items ≠ invisible.
+
+- **The only confirmed way to hide a channel from a user** is
+  `UserPolicy.EnableAllChannels = false` + populating `UserPolicy.EnabledChannels`
+  with every *other* channel's ID for that user — an allow-list, not a
+  per-channel deny flag. Rejected as a design for a single plugin's disable
+  toggle: it would require enumerating every channel from every plugin on the
+  server, doing so per-user, and keeping it in sync as channels/users change
+  — invasive overreach into an unrelated area of server administration
+  (Dashboard → Users → channel access) for a single plugin's toggle.
+
+**Conclusion**: an Emby channel-type plugin has no supported way to make its
+channel disappear from the UI at runtime while its assembly remains loaded.
+The practical ceiling for a "disable" feature is: stop all external calls,
+return zero content items. The (now-empty) Channel entity itself will always
+be visible in the Channels list, and will always be recreated by Emby's own
+built-in task if deleted. This is a platform constraint, not a gap in this
+plugin's implementation.

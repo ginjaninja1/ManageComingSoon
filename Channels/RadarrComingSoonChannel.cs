@@ -57,7 +57,7 @@ namespace ManageComingSoon.Channels
     using System.Threading;
     using System.Threading.Tasks;
 
-    public class RadarrComingSoonChannel : IChannel, ISupportsDelete, IRequiresMediaInfoCallback
+    public class RadarrComingSoonChannel : IChannel, IRequiresMediaInfoCallback
     {
         private const string IdPrefix = "radarr-coming-soon-";
         private const string CacheFileName = "radarr-channel-cache.json";
@@ -245,7 +245,7 @@ namespace ManageComingSoon.Channels
         // Radarr sync's add/remove reconciliation, which works purely off
         // whatever GetChannelItems returns each run.
         // -----------------------------------------------------------------
-
+        /*
         public bool CanDelete(BaseItem item)
         {
             var config = ManageComingSoonPlugin.Instance.Configuration;
@@ -265,7 +265,7 @@ namespace ManageComingSoon.Channels
 
             return Task.CompletedTask;
         }
-
+        */
         // -----------------------------------------------------------------
         // Cache read/write — shared with RadarrChannelSyncTask, which is the
         // only writer in Cached mode.

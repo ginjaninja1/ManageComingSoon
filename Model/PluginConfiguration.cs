@@ -14,7 +14,7 @@ namespace ManageComingSoon.Model
         // to Radarr being reachable at that exact moment.
         Live
     }
-
+    /*
     public enum RadarrRemovalStrategy
     {
         // Simply omit the item from the list returned by GetChannelItems /
@@ -26,7 +26,7 @@ namespace ManageComingSoon.Model
         // fell out of scope, in addition to omitting it going forward.
         ExplicitDelete
     }
-
+    */
     public class PluginConfiguration : BasePluginConfiguration
     {
         // ---- TMDB ----
@@ -97,7 +97,7 @@ namespace ManageComingSoon.Model
         // longer exposed in ConfigurationUI — confirmed not needed for
         // normal add/remove sync, which relies purely on implicit
         // reconciliation. See Project.md roadmap item 7.
-        public bool RadarrEnableDelete { get; set; } = false;
+        //public bool RadarrEnableDelete { get; set; } = false;
 
         // Cached vs Live — see RadarrSyncMode doc comments above. Defaulting
         // to Cached because it's the safer, better-understood starting mode;
@@ -108,7 +108,7 @@ namespace ManageComingSoon.Model
         // (ISupportsDelete safety toggle) but no longer exposed in
         // ConfigurationUI — implicit removal alone is confirmed sufficient
         // for normal sync. See Project.md roadmap item 7.
-        public RadarrRemovalStrategy RadarrRemovalStrategy { get; set; } = RadarrRemovalStrategy.Implicit;
+        //public RadarrRemovalStrategy RadarrRemovalStrategy { get; set; } = RadarrRemovalStrategy.Implicit;
 
         // Same semantics as ComingSoonStubVideoPath: empty = use the plugin's
         // embedded default placeholder video; non-empty = a validated custom
