@@ -122,5 +122,12 @@ namespace ManageComingSoon.Model
         // find "this plugin's channel" even after the Name-keyed DB row changes —
         // and flag any other Channel item carrying this tag as a stale orphan.
         public string RadarrChannelIdentityTag { get; set; } = "ManageComingSoon:RadarrChannel";
+
+        // Internal bookkeeping — the identity tag value most recently written to
+        // the Channel BaseItem by the reconciler. Not user-facing. Lets
+        // ApplyIdentityTag know exactly which stale tag to remove when
+        // RadarrChannelIdentityTag changes, instead of only ever adding and
+        // leaving old/fragment values behind.
+        public string RadarrChannelIdentityTagLastApplied { get; set; } = string.Empty;
     }
 }

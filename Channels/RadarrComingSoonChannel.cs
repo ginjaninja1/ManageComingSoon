@@ -172,9 +172,13 @@ namespace ManageComingSoon.Channels
 
             if (config.RadarrSyncMode == RadarrSyncMode.Live)
             {
+                logger.Info("ManageComingSoon: [LIVE MODE] GetChannelItems invoked — querying Radarr directly (caller-agnostic: UI browse, RefreshInternetChannels, or our own task).");
+
                 var liveMovies = await radarrClient
                     .GetComingSoonMoviesAsync(config, cancellationToken)
                     .ConfigureAwait(false);
+
+                logger.Info("ManageComingSoon: [LIVE MODE] Radarr live call returned {0} item(s). (-1 indicates a failed/null call.)", liveMovies?.Count ?? -1);
 
                 if (liveMovies == null)
                 {
@@ -422,21 +426,24 @@ namespace ManageComingSoon.Channels
 
             var posterUrl = item.PosterUrl;
 
-            // Only fall back to TMDB when Radarr genuinely didn't give us a
-            // poster — this should be the exception, not the default path,
-            // since Radarr usually already provides a RemoteUrl for the
-            // poster CoverType.
-            if (string.IsNullOrEmpty(posterUrl) && item.TmdbId > 0 && !string.IsNullOrWhiteSpace(config.TmdbApiKey))
-            {
-                var details = await tmdbService
-                    .GetMovieDetailsAsync(config.TmdbApiKey, item.TmdbId, cancellationToken)
-                    .ConfigureAwait(false);
-
-                if (details != null && !string.IsNullOrEmpty(details.PosterPath))
-                {
-                    posterUrl = "https://image.tmdb.org/t/p/original" + details.PosterPath;
-                }
-            }
+            // TMDB poster fallback — commented out, not proven necessary. Radarr has
+            // consistently supplied a poster URL in testing, and this fallback added
+            // a sequential per-item HTTP round-trip inside GetChannelItems (notable
+            // in Live mode, where GetChannelItems can be invoked directly by a user
+            // browsing the channel, not just by the background sync task). Left in
+            // place, commented, in case it's needed later.
+            //
+            // if (string.IsNullOrEmpty(posterUrl) && item.TmdbId > 0 && !string.IsNullOrWhiteSpace(config.TmdbApiKey))
+            // {
+            //     var details = await tmdbService
+            //         .GetMovieDetailsAsync(config.TmdbApiKey, item.TmdbId, cancellationToken)
+            //         .ConfigureAwait(false);
+            //
+            //     if (details != null && !string.IsNullOrEmpty(details.PosterPath))
+            //     {
+            //         posterUrl = "https://image.tmdb.org/t/p/original" + details.PosterPath;
+            //     }
+            // }
 
             var itemId = BuildItemId(item.TitleSlug);
 

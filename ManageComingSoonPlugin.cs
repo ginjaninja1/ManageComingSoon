@@ -8,6 +8,8 @@ namespace ManageComingSoon
     using MediaBrowser.Common.Net;
     using MediaBrowser.Common.Plugins;
     using MediaBrowser.Controller;
+    using MediaBrowser.Controller.Channels;
+    using MediaBrowser.Controller.Drawing;
     using MediaBrowser.Controller.Library;
     using MediaBrowser.Controller.Persistence;
     using MediaBrowser.Controller.Providers;
@@ -20,7 +22,6 @@ namespace ManageComingSoon
     using System;
     using System.Collections.Generic;
     using System.IO;
-    using MediaBrowser.Controller.Channels;
 
     public class ManageComingSoonPlugin : BasePlugin<PluginConfiguration>, IHasThumbImage, IHasUIPages
     {
@@ -32,6 +33,7 @@ namespace ManageComingSoon
         private List<IPluginUIPageController> pages;
         private EmbyLibraryAddService addServiceInstance;
         private EmbyLibraryMakeService makeServiceInstance;
+        private RadarrChannelIdentityReconciler reconcilerInstance;
 
         public static ManageComingSoonPlugin Instance { get; private set; }
 
@@ -77,6 +79,9 @@ namespace ManageComingSoon
                     var httpClient = this.appHost.Resolve<IHttpClient>();
                     var jsonSerializer = this.appHost.Resolve<IJsonSerializer>();
                     var libraryMonitor = this.appHost.Resolve<ILibraryMonitor>();
+                    var channelManager = this.appHost.Resolve<IChannelManager>();
+                    var imageProcessor = this.appHost.Resolve<IImageProcessor>();
+                    var appPaths = this.appHost.Resolve<IApplicationPaths>();
 
                     var tmdbService = new TmdbService(httpClient, jsonSerializer, this.logger);
 
@@ -104,10 +109,17 @@ namespace ManageComingSoon
                             providerManager, fileSystem, libraryMonitor, this.logger);
 
                         MakeLiveTask.SetDependencies(
-                            this.makeServiceInstance, this.logger,
-                            () => this.Configuration.EmbyApiKey,
-                            () => this.Configuration.MakeLiveDeleteStubFileMaxFileSize,
-                            () => this.Configuration.UnlockTags);
+    this.makeServiceInstance, this.logger,
+    () => this.Configuration.EmbyApiKey,
+    () => this.Configuration.MakeLiveDeleteStubFileMaxFileSize,
+    () => this.Configuration.UnlockTags);
+                    }
+
+                    if (this.reconcilerInstance == null)
+                    {
+                        this.reconcilerInstance = new RadarrChannelIdentityReconciler(
+                            channelManager, libraryManager, imageProcessor,
+                            appPaths, this.logger);
                     }
 
                     this.pages = new List<IPluginUIPageController>
@@ -119,28 +131,15 @@ namespace ManageComingSoon
                             this.addServiceInstance,
                             this.makeServiceInstance,
                             libraryManager,
+                            channelManager,
                             this.taskManager,
+                            this.reconcilerInstance,
                             this.logger)
                     };
                 }
 
                 return this.pages.AsReadOnly();
             }
-
-
         }
-        /*
-        public void InitializePlugin(IChannelManager channelManager, MediaBrowser.Model.Logging.ILogManager logManager)
-        {
-            var logger = logManager.GetLogger("ManageComingSoonPlugin");
-            logger.Info("[ManageComingSoon] Registering RequestChannel with the server.");
-
-            // CRITICAL: You must manually add your channel implementation to the server's parts list
-            channelManager.AddParts(new IChannel[]
-            {
-                new RequestChannel(logManager)
-            });
-        }
-        */
     }
 }

@@ -3,14 +3,20 @@ namespace ManageComingSoon.UI.Configuration
     using Emby.Web.GenericEdit.Common;
     using Emby.Web.GenericEdit.Elements;
     using Emby.Web.GenericEdit.Elements.List;
+    using ManageComingSoon.Services;
     using ManageComingSoon.UIBaseClasses.Views;
+    using MediaBrowser.Controller;
+    using MediaBrowser.Controller.Channels;
     using MediaBrowser.Controller.Library;
+    using MediaBrowser.Model.Logging;
     using MediaBrowser.Model.Plugins;
     using MediaBrowser.Model.Plugins.UI.Views;
+    using MediaBrowser.Model.Tasks;
     using System;
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
+    using System.Threading;
     using System.Threading.Tasks;
 
     internal class ConfigurationPageView : PluginPageView
@@ -26,17 +32,45 @@ namespace ManageComingSoon.UI.Configuration
         // Radarr channel's own default placeholder.
         private const string DefaultStubResourceName = "ManageComingSoon.comingsoon.mp4";
 
+        private const string RefreshChannelsTaskKey = "RefreshInternetChannels";
+        private const string RefreshChannelsTaskName = "Refresh Internet Channels";
+
+        // AutoPostBack means SaveConfiguration fires on every keystroke, not
+        // just when the user is "done" editing a field. Reconciliation
+        // (RefreshInternetChannels + tag/image/orphan cleanup) is real
+        // server-side work we don't want firing on every partial keystroke
+        // value, so healing triggers are debounced — reset on every save,
+        // only actually run once typing has paused for DebounceMs.
+        // Must be static: a new ConfigurationPageView instance is created
+        // per page load/postback, so instance fields wouldn't survive
+        // between keystrokes.
+        private static Timer debounceTimer;
+        private static readonly object DebounceLock = new object();
+        private const int DebounceMs = 1500;
+
         private readonly ManageComingSoonPlugin plugin;
         private readonly ILibraryManager libraryManager;
+        private readonly IChannelManager channelManager;
+        private readonly ITaskManager taskManager;
+        private readonly RadarrChannelIdentityReconciler reconciler;
+        private readonly ILogger logger;
 
         public ConfigurationPageView(
             PluginInfo pluginInfo,
             ManageComingSoonPlugin plugin,
-            ILibraryManager libraryManager)
+            ILibraryManager libraryManager,
+            IChannelManager channelManager,
+            ITaskManager taskManager,
+            RadarrChannelIdentityReconciler reconciler,
+            ILogger logger)
             : base(pluginInfo.Id)
         {
             this.plugin = plugin;
             this.libraryManager = libraryManager;
+            this.channelManager = channelManager;
+            this.taskManager = taskManager;
+            this.reconciler = reconciler;
+            this.logger = logger;
 
             var ui = new ConfigurationUI();
             this.ContentData = ui;
@@ -129,6 +163,11 @@ namespace ManageComingSoon.UI.Configuration
             var ui = UI;
             var cfg = this.plugin.Configuration;
 
+            // ---- Capture pre-save state for transition detection -----------------
+            bool wasEnabled = cfg.RadarrEnabled;
+            string oldChannelName = cfg.RadarrChannelName;
+            string oldIdentityTag = cfg.RadarrChannelIdentityTag;
+
             // ---- Standard fields -----------------------------------------------
             cfg.TmdbApiKey = ui.TmdbApiKey;
             cfg.MakeLiveMoveToNewLocation = ui.MakeLiveMoveToNewLocation;
@@ -170,10 +209,6 @@ namespace ManageComingSoon.UI.Configuration
             cfg.RadarrSyncMode = ui.RadarrSyncMode;
 
             // ---- Coming Soon tag --------------------------------------------------
-            // Tag text is always required. If the user clears the field, fall back
-            // to the default and write it back into the UI model so the field
-            // visibly reverts to "Coming Soon" in the postback response rather than
-            // silently saving the default while leaving the field appearing blank.
             string tagText = (ui.ComingSoonTagText ?? string.Empty).Trim();
             if (string.IsNullOrEmpty(tagText))
             {
@@ -186,12 +221,6 @@ namespace ManageComingSoon.UI.Configuration
             }
 
             // ---- Stub video paths -------------------------------------------------
-            // Single source of truth: the path itself. No separate enable toggle.
-            // The UI field is ALWAYS left exactly as the user typed/picked it —
-            // never cleared or overwritten by this method — so the user can always
-            // see, edit, or clear their own input regardless of validity. Only the
-            // CONFIG value is gated on validity. Same validation logic applied to
-            // both the ComingSoon and Radarr stub fields.
             cfg.ComingSoonStubVideoPath = ValidateStubVideoPath(
                 ui.ComingSoonStubVideoPath, ui.StubVideoStatusItem);
 
@@ -199,18 +228,88 @@ namespace ManageComingSoon.UI.Configuration
                 ui.RadarrStubVideoPath, ui.RadarrStubVideoStatusItem);
 
             this.plugin.UpdateConfiguration(cfg);
+
+            // ---- Debounced healing triggers ---------------------------------------
+            // AutoPostBack means this method runs on every keystroke, so a
+            // rename/tag-change "in progress" mid-typing must NOT trigger
+            // real reconciliation work each time. Only the state actually
+            // used inside the debounced callback is captured here
+            // (lastAppliedTag), everything else reads live off `cfg` when
+            // the timer actually fires, ~DebounceMs after typing stops.
+
+            bool justEnabled = !wasEnabled && cfg.RadarrEnabled;
+            bool nameChanged = cfg.RadarrEnabled &&
+                !string.Equals(oldChannelName, cfg.RadarrChannelName, StringComparison.OrdinalIgnoreCase);
+            bool tagChanged = cfg.RadarrEnabled &&
+                !string.Equals(oldIdentityTag, cfg.RadarrChannelIdentityTag, StringComparison.OrdinalIgnoreCase);
+
+            if (justEnabled || nameChanged || tagChanged)
+            {
+                string lastAppliedTag = cfg.RadarrChannelIdentityTagLastApplied;
+
+                logger.Info(
+                    "ManageComingSoon: Config save queued debounced reconciliation — JustEnabled={0}, NameChanged={1}, TagChanged={2}. Will fire in {3}ms if no further edits arrive.",
+                    justEnabled, nameChanged, tagChanged, DebounceMs);
+
+                lock (DebounceLock)
+                {
+                    debounceTimer?.Dispose();
+                    debounceTimer = new Timer(_ =>
+                    {
+                        RunDebouncedReconciliation(tagChanged, lastAppliedTag);
+                    }, null, DebounceMs, Timeout.Infinite);
+                }
+            }
+        }
+
+        private void RunDebouncedReconciliation(bool tagChanged, string lastAppliedTag)
+        {
+            try
+            {
+                var cfg = this.plugin.Configuration;
+
+                if (tagChanged && !string.IsNullOrEmpty(lastAppliedTag))
+                {
+                    // Clean up orphans under whatever tag was actually last
+                    // written to a Channel item (not just the pre-save UI
+                    // value, which may itself have been a mid-typing
+                    // fragment) before reconciling under the new tag.
+                    reconciler.CleanupOrphansForTag(cfg, lastAppliedTag);
+                }
+
+                TriggerRefreshInternetChannelsAsync().GetAwaiter().GetResult();
+                reconciler.Reconcile(cfg);
+
+                logger.Info("ManageComingSoon: Debounced post-save reconciliation completed.");
+            }
+            catch (Exception ex)
+            {
+                logger.ErrorException("ManageComingSoon: Debounced reconciliation failed", ex);
+            }
+        }
+
+        private async Task TriggerRefreshInternetChannelsAsync()
+        {
+            var refreshWorker = taskManager.ScheduledTasks
+                .FirstOrDefault(w => string.Equals(w.ScheduledTask?.Key, RefreshChannelsTaskKey, StringComparison.OrdinalIgnoreCase))
+                ?? taskManager.ScheduledTasks
+                    .FirstOrDefault(w => string.Equals(w.Name, RefreshChannelsTaskName, StringComparison.OrdinalIgnoreCase));
+
+            if (refreshWorker == null)
+            {
+                logger.Warn(
+                    "ManageComingSoon: Could not find the built-in channel-refresh task (Key='{0}' / Name='{1}') during debounced reconciliation.",
+                    RefreshChannelsTaskKey, RefreshChannelsTaskName);
+                return;
+            }
+
+            await taskManager.Execute(refreshWorker, new TaskOptions()).ConfigureAwait(false);
         }
 
         // -----------------------------------------------------------------------
         // Stub video status helpers — shared by ComingSoon and Radarr fields
         // -----------------------------------------------------------------------
 
-        /// <summary>
-        /// Validates a stub video path field, updates the corresponding status
-        /// item to reflect the result, and returns what should actually be
-        /// saved into config (empty string if invalid/missing — falls back to
-        /// the default rather than persisting a broken path).
-        /// </summary>
         private static string ValidateStubVideoPath(string rawPath, GenericListItem statusItem)
         {
             string path = (rawPath ?? string.Empty).Trim();
@@ -259,10 +358,6 @@ namespace ManageComingSoon.UI.Configuration
             }
         }
 
-        /// <summary>
-        /// Sets a status item on page load to reflect the currently saved
-        /// (already-validated) config path, without re-running validation.
-        /// </summary>
         private static void RefreshStubVideoStatus(GenericListItem targetItem, string savedPath)
         {
             if (string.IsNullOrEmpty(savedPath))
@@ -282,10 +377,6 @@ namespace ManageComingSoon.UI.Configuration
             }
         }
 
-        /// <summary>
-        /// Returns the size of a file on disk formatted as "[NMB]", or empty
-        /// string if it can't be determined (e.g. file missing or inaccessible).
-        /// </summary>
         private static string FormatFileSizeMb(string path)
         {
             try
@@ -300,20 +391,10 @@ namespace ManageComingSoon.UI.Configuration
             }
         }
 
-        /// <summary>
-        /// Returns the size of the embedded default stub video (the one
-        /// EmbyLibraryAddService/RadarrComingSoonChannel fall back to via
-        /// GetManifestResourceStream), formatted as "[NMB]", or empty string
-        /// if it can't be read.
-        /// </summary>
         private static string FormatDefaultStubSizeMb()
         {
             try
             {
-                // Use the plugin's own assembly, not Assembly.GetExecutingAssembly() —
-                // if ConfigurationPageView lives in a separate UI project from
-                // EmbyLibraryAddService, GetExecutingAssembly() here would return the
-                // wrong assembly and the resource lookup would silently return null.
                 var asm = typeof(ManageComingSoonPlugin).Assembly;
                 using (var stream = asm.GetManifestResourceStream(DefaultStubResourceName))
                 {
