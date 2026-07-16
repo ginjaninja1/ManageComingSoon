@@ -1,4 +1,6 @@
 using ManageComingSoon.Services.Models;
+using ManageComingSoon.Services.Rules;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Model.Serialization;
 using MediaBrowser.Model.Logging;
@@ -6,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ManageComingSoon.Model;
@@ -17,25 +20,31 @@ namespace ManageComingSoon.Services
         private readonly IHttpClient httpClient;
         private readonly IJsonSerializer json;
         private readonly ILogger logger;
+        private readonly RadarrRuleSetStore ruleSetStore;
+        private readonly IApplicationPaths appPaths;
 
         public RadarrClient(
             IHttpClient httpClient,
             IJsonSerializer jsonSerializer,
-            ILogger logger)
+            ILogger logger,
+            RadarrRuleSetStore ruleSetStore,
+            IApplicationPaths appPaths)
         {
             this.httpClient = httpClient;
             this.json = jsonSerializer;
             this.logger = logger;
+            this.ruleSetStore = ruleSetStore;
+            this.appPaths = appPaths;
         }
 
-        private async Task<List<RadarrMovie>> GetAllMoviesAsync(
+        private async Task<(List<RadarrMovie> Typed, string RawJson)> GetAllMoviesWithRawAsync(
             PluginConfiguration config,
             CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(config.RadarrApiKey))
             {
                 logger.Warn("Radarr API key has not been configured.");
-                return null;
+                return (null, null);
             }
 
             var baseUrl = config.RadarrUrl.TrimEnd('/') + "/api/v3/movie";
@@ -68,7 +77,7 @@ namespace ManageComingSoon.Services
                     if (movies == null)
                     {
                         logger.Warn("ManageComingSoon: Radarr response could not be parsed into a movie list. Raw body logged above at Debug level.");
-                        return null;
+                        return (null, jsonText);
                     }
 
                     logger.Info("ManageComingSoon: Radarr returned {0} movies.", movies.Count);
@@ -80,13 +89,13 @@ namespace ManageComingSoon.Services
                             m.TmdbId, m.TitleSlug, m.Title, m.Monitored, m.HasFile);
                     }
 
-                    return movies;
+                    return (movies, jsonText);
                 }
             }
             catch (Exception ex)
             {
                 logger.ErrorException("ManageComingSoon: Radarr call failed for {0}", ex, baseUrl);
-                return null;
+                return (null, null);
             }
         }
 
@@ -94,7 +103,7 @@ namespace ManageComingSoon.Services
             PluginConfiguration config,
             CancellationToken cancellationToken)
         {
-            var movies = await GetAllMoviesAsync(config, cancellationToken).ConfigureAwait(false);
+            var (movies, _) = await GetAllMoviesWithRawAsync(config, cancellationToken).ConfigureAwait(false);
             if (movies == null) return Array.Empty<RadarrMovie>();
 
             return movies
@@ -108,14 +117,54 @@ namespace ManageComingSoon.Services
             PluginConfiguration config,
             CancellationToken cancellationToken)
         {
-            var movies = await GetAllMoviesAsync(config, cancellationToken).ConfigureAwait(false);
-            if (movies == null) return null;
+            var (typed, rawJson) = await GetAllMoviesWithRawAsync(config, cancellationToken).ConfigureAwait(false);
+            if (typed == null || rawJson == null) return null;
 
-            return movies
-                .Where(i => i.Monitored)
-                .Where(i => !i.HasFile)
-                .OrderBy(i => i.Title)
-                .ToList();
+            WriteLastResponseSnapshot(rawJson);
+
+            var ruleRoot = ruleSetStore.GetActiveRuleRoot();
+
+            try
+            {
+                using (var doc = JsonDocument.Parse(rawJson))
+                {
+                    var matchedIds = new HashSet<int>(
+                        doc.RootElement.EnumerateArray()
+                            .Where(el => RuleEvaluator.Matches(el, ruleRoot))
+                            .Select(el => el.GetProperty("id").GetInt32()));
+
+                    logger.Info(
+                        "ManageComingSoon: Rule evaluation matched {0} of {1} Radarr movies.",
+                        matchedIds.Count, typed.Count);
+
+                    return typed
+                        .Where(m => matchedIds.Contains(m.Id))
+                        .OrderBy(m => m.Title)
+                        .ToList();
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.ErrorException("ManageComingSoon: Rule evaluation failed against Radarr response — falling back to no items rather than an unfiltered list", ex);
+                return Array.Empty<RadarrMovie>();
+            }
+        }
+
+        private void WriteLastResponseSnapshot(string rawJson)
+        {
+            try
+            {
+                var path = Path.Combine(appPaths.DataPath, "manage-coming-soon", "radarr-last-response.json");
+                var dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                File.WriteAllText(path, rawJson);
+            }
+            catch (Exception ex)
+            {
+                logger.ErrorException("ManageComingSoon: Failed to write radarr-last-response.json snapshot", ex);
+            }
         }
     }
 }

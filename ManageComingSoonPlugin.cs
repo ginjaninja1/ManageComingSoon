@@ -16,6 +16,7 @@ namespace ManageComingSoon
     using MediaBrowser.Model.Drawing;
     using MediaBrowser.Model.IO;
     using MediaBrowser.Model.Logging;
+    using MediaBrowser.Model.Plugins;
     using MediaBrowser.Model.Plugins.UI;
     using MediaBrowser.Model.Serialization;
     using MediaBrowser.Model.Tasks;
@@ -23,7 +24,7 @@ namespace ManageComingSoon
     using System.Collections.Generic;
     using System.IO;
 
-    public class ManageComingSoonPlugin : BasePlugin<PluginConfiguration>, IHasThumbImage, IHasUIPages
+    public class ManageComingSoonPlugin : BasePlugin<PluginConfiguration>, IHasThumbImage, IHasUIPages, IHasWebPages
     {
         private static readonly Guid PluginId = new Guid("3A1F9C82-7D4E-4B5A-9F2D-1E8C6A3B0D74");
 
@@ -64,6 +65,34 @@ namespace ManageComingSoon
             var type = GetType();
             return type.Assembly.GetManifestResourceStream(type.Namespace + ".thumb.png")
                    ?? Stream.Null;
+        }
+
+        // -----------------------------------------------------------------
+        // IHasWebPages — serves the custom Radarr Rules editor as a raw
+        // embedded HTML/JS page, since the drag-and-drop-free but still
+        // dynamic rule-list UI can't be built with Emby.Web.GenericEdit
+        // (the mechanism ConfigurationUI/ConfigurationPageView use).
+        // Pattern confirmed against Emby.AutoOrganize's autoorganizetv.html
+        // / autoorganizetv.js embedded-resource pair.
+        // -----------------------------------------------------------------
+        public IEnumerable<PluginPageInfo> GetPages()
+        {
+            return new[]
+            {
+                new PluginPageInfo
+                {
+                    Name = "RadarrRulesPage",
+                    EmbeddedResourcePath = GetType().Namespace + ".Services.Models.Rules.rulesPage.html",
+                    EnableInMainMenu = true,
+                    DisplayName = "Radarr Coming Soon Rules",
+                    MenuIcon = "rule_folder"
+                },
+                new PluginPageInfo
+                {
+                    Name = "RadarrRulesPageJs",
+                    EmbeddedResourcePath = GetType().Namespace + ".Services.Models.Rules.rulesPage.js"
+                }
+            };
         }
 
         public IReadOnlyCollection<IPluginUIPageController> UIPageControllers

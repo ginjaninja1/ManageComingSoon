@@ -210,6 +210,20 @@ namespace ManageComingSoon.UI.Configuration
 
         public GenericItemList RadarrStubVideoStatusList => new GenericItemList { RadarrStubVideoStatusItem };
 
+        public GenericItemList RadarrRulesLink { get; set; } = new GenericItemList
+{
+    new GenericListItem
+    {
+        PrimaryText = "Manage Radarr Coming Soon Rules",
+        SecondaryText = "Edit which Radarr movies appear in the channel",
+        Icon = IconNames.rule_folder, // fallback to any existing IconNames member if this doesn't exist — flag if it doesn't compile
+        Status = ItemStatus.None,
+        HyperLink = "configurationpage?name=RadarrRulesPage",
+        HyperLinkTargetExternal = false
+    }
+};
+
+
         public SpacerItem Spacer6 { get; set; } = new SpacerItem();
 
         public GenericItemList ForumLink { get; set; } = new GenericItemList

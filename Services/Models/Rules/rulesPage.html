@@ -1,0 +1,28 @@
+﻿<div data-role="page" class="page type-interior" data-controller="__plugin/RadarrRulesPageJs">
+    <div data-role="content">
+        <div class="content-primary">
+            <h1>Radarr Coming Soon — Rules</h1>
+
+            <div class="fieldDescription">
+                Movies matching this rule are shown in the Radarr Coming Soon channel.
+                Groups combine conditions with AND / OR. Each condition compares a field against a value.
+            </div>
+
+            <div id="ruleGroupLogic">
+                <label>Combine conditions using:</label>
+                <select is="emby-select" id="selectLogicOperator">
+                    <option value="And">ALL of these (AND)</option>
+                    <option value="Or">ANY of these (OR)</option>
+                </select>
+            </div>
+
+            <div id="conditionsList"></div>
+
+            <button is="emby-button" type="button" id="btnAddCondition" class="raised">Add Condition</button>
+            <button is="emby-button" type="button" id="btnSave" class="raised button-submit">Save Rule</button>
+            <button is="emby-button" type="button" id="btnPreview" class="raised">Preview Matches</button>
+
+            <div id="previewResult" style="margin-top:1em;"></div>
+        </div>
+    </div>
+</div>

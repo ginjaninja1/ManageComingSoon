@@ -248,3 +248,81 @@ return zero content items. The (now-empty) Channel entity itself will always
 be visible in the Channels list, and will always be recreated by Emby's own
 built-in task if deleted. This is a platform constraint, not a gap in this
 plugin's implementation.
+
+
+
+Custom Plugin Pages via IHasWebPages (Rules UI session)
+
+Confirmed via live testing while building the Radarr rules editor — a
+custom HTML/JS page not built with Emby.Web.GenericEdit.
+
+IHasWebPages (MediaBrowser.Model.Plugins) is a separate, parallel
+mechanism to IHasUIPages/Emby.Web.GenericEdit (the mechanism
+ConfigurationUI/ConfigurationPageView use):
+
+csharppublic interface IHasWebPages
+{
+    IEnumerable<PluginPageInfo> GetPages();
+}
+
+Confirmed pattern (cross-checked against multiple real public plugins —
+Bookshelf, ComSkipper, Statistics, SoundCloud — all identical):
+
+csharppublic IEnumerable<PluginPageInfo> GetPages()
+{
+    return new[]
+    {
+        new PluginPageInfo
+        {
+            Name = "RadarrRulesPage",
+            EmbeddedResourcePath = GetType().Namespace + ".Services.Models.Rules.rulesPage.html",
+            EnableInMainMenu = true,
+            DisplayName = "Radarr Coming Soon Rules",
+            MenuIcon = "rule_folder"
+        },
+        new PluginPageInfo
+        {
+            Name = "RadarrRulesPageJs",
+            EmbeddedResourcePath = GetType().Namespace + ".Services.Models.Rules.rulesPage.js"
+        }
+    };
+}
+
+Critical — EmbeddedResourcePath must exactly match the compiled resource
+name, which is derived from the file's actual location as declared in the
+.csproj's <EmbeddedResource Include="..."> item, not an assumed folder.
+Confirmed failure mode: registering the page with a path pointing at a
+folder the file isn't actually in (UI.Rules.rulesPage.html) produces no
+compile error — the mismatch only surfaces at request time, as:
+
+System.IO.FileNotFoundException: File not found: RadarrRulesPage
+   at Emby.Web.Api.WebAppService.Get(GetDashboardConfigurationPage request)
+
+This confirms WebAppService.Get(GetDashboardConfigurationPage) is the
+server-side handler for the configurationpage?name=X dashboard route —
+the page registration (Name lookup) succeeded, but
+Assembly.GetManifestResourceStream(EmbeddedResourcePath) returned null.
+Fix: match EmbeddedResourcePath to the file's real path exactly, e.g. for
+<EmbeddedResource Include="Services\Models\Rules\rulesPage.html" />, the
+correct value is Namespace + ".Services.Models.Rules.rulesPage.html".
+
+
+Confirmed working: ApiClient.ajax calling convention for a custom
+plugin API surface, from the page's own JS (loaded via the .js
+PluginPageInfo entry above, following the data-controller="__plugin/X"
+binding convention used by autoorganizetv.js):
+
+javascriptApiClient.ajax({
+    type: 'GET',  // or 'POST'
+    url: ApiClient.getUrl('ManageComingSoon/RadarrRuleSets'),
+    data: JSON.stringify(payload), // POST only
+    contentType: 'application/json', // POST only
+    dataType: 'json'
+}).then(function (result) { ... });
+
+Server side, a plain MediaBrowser.Model.Services.IService class with
+[Route]-decorated request DTOs (IReturn<T>) is auto-discovered the same
+way as IChannel/IScheduledTask — no manual registration needed. Matches
+the official dev.emby.media "Creating Api Endpoints" doc pattern exactly.
+Confirmed working for both GET (Get(TRequest)) and POST
+(Post(TRequest)) handler methods on the same service class.
