@@ -137,7 +137,39 @@
                     return false;
             }
         }
+        // Resolves a dotted field path to a human-readable display string
+        // for a given movie — used by the preview table (not by matching
+        // itself). Reuses the same TryResolve/ScalarToString machinery as
+        // Compare() above so display values stay consistent with what
+        // matching actually evaluated against.
+        public static string ResolveDisplayValue(JsonElement movie, string field)
+        {
+            var segments = (field ?? string.Empty).Split('.');
+            if (segments.Length == 0 || segments[0].Length == 0) return string.Empty;
 
+            if (!TryResolve(movie, segments, 0, out var resolved, out var remaining))
+                return string.Empty;
+
+            if (resolved.ValueKind == JsonValueKind.Array)
+            {
+                if (remaining.Length > 0)
+                {
+                    var projected = resolved.EnumerateArray()
+                        .Select(item =>
+                        {
+                            if (TryResolve(item, remaining, 0, out var sub, out var subRemaining) && subRemaining.Length == 0)
+                                return ScalarToString(sub);
+                            return null;
+                        })
+                        .Where(v => v != null);
+                    return string.Join(", ", projected);
+                }
+
+                return string.Join(", ", resolved.EnumerateArray().Select(ScalarToString));
+            }
+
+            return ScalarToString(resolved);
+        }
         private static string ScalarToString(JsonElement el) =>
             el.ValueKind == JsonValueKind.String ? el.GetString() : el.ToString();
 

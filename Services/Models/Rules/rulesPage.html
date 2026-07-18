@@ -1,28 +1,290 @@
 ﻿<div data-role="page" class="page type-interior" data-controller="__plugin/RadarrRulesPageJs">
-    <div data-role="content">
-        <div class="content-primary">
-            <h1>Radarr Coming Soon — Rules</h1>
+	<div data-role="content">
+		<div class="content-primary">
+			<style>
+				#rcsRulesRoot { display: flex; gap: 1.5em; align-items: flex-start; margin-top: 0.5em; }
 
-            <div class="fieldDescription">
-                Movies matching this rule are shown in the Radarr Coming Soon channel.
-                Groups combine conditions with AND / OR. Each condition compares a field against a value.
-            </div>
+				#rcsPalette {
+				flex: 0 0 220px;
+				position: sticky;
+				top: 0.5em;
+				}
+				.rcsPaletteSection { margin-bottom: 0.8em; }
+				.rcsPaletteSectionTitle {
+				font-size: 0.8em;
+				text-transform: uppercase;
+				letter-spacing: 0.05em;
+				opacity: 0.6;
+				margin-bottom: 0.4em;
+				}
+				.rcsPaletteChips { display: flex; flex-wrap: wrap; gap: 0.4em; }
 
-            <div id="ruleGroupLogic">
-                <label>Combine conditions using:</label>
-                <select is="emby-select" id="selectLogicOperator">
-                    <option value="And">ALL of these (AND)</option>
-                    <option value="Or">ANY of these (OR)</option>
-                </select>
-            </div>
+				.rcsChip {
+				display: inline-block;
+				padding: 0.35em 0.7em;
+				border-radius: 999px;
+				font-size: 0.85em;
+				cursor: grab;
+				user-select: none;
+				border: 1px solid rgba(255,255,255,0.15);
+				white-space: nowrap;
+				}
+				.rcsChip:active { cursor: grabbing; }
+				.rcsChip-field     { background: rgba(82,158,255,0.18);  border-color: rgba(82,158,255,0.4); }
+				.rcsChip-operator  { background: rgba(255,181,77,0.18);  border-color: rgba(255,181,77,0.4); }
+				.rcsChip-logic     { background: rgba(190,140,255,0.18); border-color: rgba(190,140,255,0.4); }
+				.rcsChip-not       { background: rgba(255,90,90,0.18);   border-color: rgba(255,90,90,0.45); }
+				.rcsChip-structure {
+				background: hsla(var(--theme-primary-color-hue), var(--theme-primary-color-saturation), var(--theme-primary-color-lightness), 0.22);
+				border-color: hsla(var(--theme-primary-color-hue), var(--theme-primary-color-saturation), var(--theme-primary-color-lightness), 0.6);
+				font-weight: 600;
+				}
+				.rcsChip[data-disabled="true"] { opacity: 0.3; cursor: not-allowed; }
 
-            <div id="conditionsList"></div>
+				.rcsFieldTypeTag {
+				font-size: 0.7em;
+				opacity: 0.55;
+				margin-left: 0.3em;
+				}
 
-            <button is="emby-button" type="button" id="btnAddCondition" class="raised">Add Condition</button>
-            <button is="emby-button" type="button" id="btnSave" class="raised button-submit">Save Rule</button>
-            <button is="emby-button" type="button" id="btnPreview" class="raised">Preview Matches</button>
+				#rcsCanvas { flex: 1 1 auto; min-width: 0; }
 
-            <div id="previewResult" style="margin-top:1em;"></div>
-        </div>
-    </div>
+				.rcsGroup {
+				border: 1.5px solid hsla(var(--theme-primary-color-hue), var(--theme-primary-color-saturation), var(--theme-primary-color-lightness), 0.35);
+				border-radius: 10px;
+				padding: 0.8em;
+				margin-bottom: 0.8em;
+				background: hsla(var(--theme-primary-color-hue), var(--theme-primary-color-saturation), var(--theme-primary-color-lightness), 0.04);
+				}
+				.rcsGroup.rcsGroupRoot {
+				border-color: hsla(var(--theme-primary-color-hue), var(--theme-primary-color-saturation), var(--theme-primary-color-lightness), 0.55);
+				}
+				.rcsGroup.rcsGroupEmpty {
+				border-color: rgba(255,193,7,0.7);
+				border-style: dashed;
+				background: rgba(255,193,7,0.06);
+				}
+				.rcsGroupHeader { display: flex; align-items: center; gap: 0.5em; margin-bottom: 0.6em; flex-wrap: wrap; }
+				.rcsHandle { cursor: grab; opacity: 0.5; font-size: 1.1em; }
+				.rcsHandle:active { cursor: grabbing; }
+
+				.rcsBadge {
+				display: inline-flex;
+				align-items: center;
+				gap: 0.3em;
+				padding: 0.25em 0.6em;
+				border-radius: 999px;
+				font-size: 0.8em;
+				border: 1px dashed rgba(255,255,255,0.25);
+				min-width: 2.2em;
+				justify-content: center;
+				}
+				.rcsBadge.rcsBadge-connector { background: rgba(190,140,255,0.18); border-style: solid; border-color: rgba(190,140,255,0.4); }
+				.rcsBadge.rcsBadge-not-empty { opacity: 0.45; }
+				.rcsBadge.rcsBadge-not-active { background: rgba(255,90,90,0.22); border-style: solid; border-color: rgba(255,90,90,0.5); }
+				.rcsBadge.rcsDragOver {
+				border-color: #ffd54f;
+				border-style: solid;
+				background: rgba(255,213,79,0.28);
+				box-shadow: 0 0 0 3px rgba(255,213,79,0.35);
+				}
+
+				.rcsGroupChildren {
+				padding: 0.4em 0 0.4em 1em;
+				border-left: 2px solid rgba(255,255,255,0.08);
+				min-height: 2.4em;
+				}
+				.rcsGroupChildren.rcsDragOver { background: rgba(120,220,120,0.08); border-left-color: rgba(120,220,120,0.5); }
+				.rcsEmptyHint { font-size: 0.8em; opacity: 0.45; padding: 0.3em 0; }
+
+				.rcsGroupFooter { display: flex; gap: 0.5em; margin-top: 0.4em; }
+
+				.rcsCondition {
+				display: flex;
+				align-items: center;
+				gap: 0.5em;
+				padding: 0.4em 0.5em;
+				margin-bottom: 0.5em;
+				border-radius: 8px;
+				background: rgba(255,255,255,0.03);
+				border: 1px solid rgba(255,255,255,0.08);
+				flex-wrap: wrap;
+				}
+				.rcsCondition.rcsInvalid { border-color: rgba(255,90,90,0.7); background: rgba(255,90,90,0.08); }
+
+				.rcsSlot {
+				min-width: 3.5em;
+				padding: 0.3em 0.6em;
+				border-radius: 6px;
+				border: 1.5px dashed rgba(255,255,255,0.25);
+				font-size: 0.85em;
+				text-align: center;
+				}
+				.rcsSlot.rcsSlot-filled.rcsSlot-field    { background: rgba(82,158,255,0.18);  border-style: solid; border-color: rgba(82,158,255,0.4); }
+				.rcsSlot.rcsSlot-filled.rcsSlot-operator { background: rgba(255,181,77,0.18);  border-style: solid; border-color: rgba(255,181,77,0.4); }
+				.rcsSlot.rcsDragOver {
+				border-color: #ffd54f;
+				border-style: solid;
+				background: rgba(255,213,79,0.3);
+				box-shadow: 0 0 0 3px rgba(255,213,79,0.4);
+				}
+				.rcsSlot.rcsSlotRejected { border-color: rgba(255,90,90,0.9) !important; background: rgba(255,90,90,0.25) !important; }
+				.rcsSlot.rcsSlot-locked { opacity: 0.55; border-style: solid; cursor: default; }
+
+				.rcsValueWidget { display: inline-flex; align-items: center; gap: 0.3em; }
+				.rcsValueInput {
+				min-width: 6em;
+				padding: 0.3em 0.5em;
+				border-radius: 6px;
+				border: 1px solid rgba(255,255,255,0.2);
+				background: rgba(0,0,0,0.2);
+				color: inherit;
+				}
+				.rcsBoolToggle {
+				display: inline-flex;
+				border-radius: 6px;
+				overflow: hidden;
+				border: 1px solid rgba(255,255,255,0.2);
+				}
+				.rcsBoolOption {
+				padding: 0.3em 0.7em;
+				font-size: 0.85em;
+				cursor: pointer;
+				background: rgba(0,0,0,0.15);
+				}
+				.rcsBoolOption.rcsBoolOption-active { background: rgba(82,158,255,0.35); }
+
+				.rcsIconBtn {
+				cursor: pointer;
+				opacity: 0.6;
+				font-size: 0.85em;
+				padding: 0.2em 0.4em;
+				}
+				.rcsIconBtn:hover { opacity: 1; }
+
+				#rcsPreviewSection {
+				margin-top: 1.5em;
+				padding-top: 1em;
+				border-top: 1px solid rgba(255,255,255,0.1);
+				}
+				#rcsPreviewStatus { font-size: 0.85em; opacity: 0.6; margin-bottom: 0.5em; }
+
+				.rcsDragGhost {
+				position: fixed;
+				z-index: 9999;
+				pointer-events: none;
+				padding: 0.35em 0.7em;
+				border-radius: 999px;
+				font-size: 0.85em;
+				background: var(--rcs-surface-bg, rgba(40,40,50,0.95));
+				color: #fff;
+				border: 1px solid rgba(255,255,255,0.3);
+				box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+				white-space: nowrap;
+				top: 0;
+				left: 0;
+				}
+
+				.rcsInsertionIndicator {
+				position: fixed;
+				height: 3px;
+				background: #4ade80;
+				border-radius: 2px;
+				z-index: 9998;
+				pointer-events: none;
+				box-shadow: 0 0 6px rgba(74,222,128,0.8);
+				display: none;
+				}
+
+				.rcsPreviewTableWrapper {
+				overflow-x: auto;
+				max-width: 100%;
+				border: 1px solid rgba(255,255,255,0.1);
+				border-radius: 8px;
+				}
+				.rcsPreviewTable {
+				border-collapse: separate;
+				border-spacing: 0;
+				font-size: 0.85em;
+				white-space: nowrap;
+				}
+				.rcsPreviewTable th, .rcsPreviewTable td {
+				padding: 0.5em 0.8em;
+				border-bottom: 1px solid rgba(255,255,255,0.08);
+				border-right: 1px solid rgba(255,255,255,0.05);
+				text-align: left;
+				}
+				.rcsPreviewTable th {
+				background: rgba(255,255,255,0.05);
+				font-weight: 600;
+				}
+				.rcsPreviewTable th:first-child,
+				.rcsPreviewTable td:first-child {
+				position: sticky;
+				left: 0;
+				background-color: #f3ecff;
+				color: #2a2a2a;
+				background-clip: padding-box;
+				z-index: 2;
+				font-weight: 600;
+				box-shadow: 2px 0 4px rgba(0,0,0,0.3);
+				}
+			</style>
+
+			<div id="rcsRulesRoot">
+				<div id="rcsPalette">
+					<div class="rcsPaletteSection">
+						<div class="rcsPaletteSectionTitle">Structure</div>
+						<div class="rcsPaletteChips">
+							<span class="rcsChip rcsChip-structure" data-chip-kind="new-condition">Condition</span>
+							<span class="rcsChip rcsChip-structure" data-chip-kind="new-group">Group ( )</span>
+						</div>
+					</div>
+					<div class="rcsPaletteSection">
+						<div class="rcsPaletteSectionTitle">Logic</div>
+						<div class="rcsPaletteChips">
+							<span class="rcsChip rcsChip-logic" data-chip-kind="logic" data-chip-value="And">AND</span>
+							<span class="rcsChip rcsChip-logic" data-chip-kind="logic" data-chip-value="Or">OR</span>
+							<span class="rcsChip rcsChip-not" data-chip-kind="not">NOT</span>
+						</div>
+					</div>
+					<div class="rcsPaletteSection">
+						<div class="rcsPaletteSectionTitle">Fields</div>
+						<div class="rcsPaletteChips" id="rcsFieldChips"></div>
+					</div>
+					<div class="rcsPaletteSection">
+						<div class="rcsPaletteSectionTitle">Operators</div>
+						<div class="rcsPaletteChips" id="rcsOperatorChips"></div>
+					</div>
+				</div>
+
+				<div id="rcsCanvas">
+					<div id="conditionsList"></div>
+
+					<div style="margin-top: 1em; display:flex; gap:0.5em;">
+						<button is="emby-button" type="button" id="btnSave" class="raised button-submit">Save Rule</button>
+					</div>
+
+					<div id="rcsPreviewSection">
+						<div id="rcsPreviewStatus">Live preview updates automatically as the rule becomes valid.</div>
+						<div id="previewResult"></div>
+						<div style="margin-top: 0.8em;">
+							<a href="#" id="rcsToggleJson" style="font-size: 0.8em; opacity: 0.6;">Show rule JSON (for debugging)</a>
+						</div>
+						<pre id="rcsRuleJson" style="display:none; margin-top: 0.5em; padding: 0.6em; background: rgba(0,0,0,0.25); border-radius: 6px; font-size: 0.75em; overflow-x: auto; max-height: 300px;"></pre>
+					</div>
+
+					<div class="fieldDescription" style="margin-top: 1.5em; padding-top: 1em; border-top: 1px solid rgba(255,255,255,0.1);">
+						Drag pieces from the palette onto the canvas to build the rule. Fields and operators
+						drop into their matching slot on a condition. Drag "Condition" or "Group ( )" into a
+						group to add to it. Drag AND / OR onto a group's connector badge, and NOT onto a
+						condition or group to negate it. Boolean fields get a fixed True/False toggle instead
+						of a typed value — e.g. to say "not hasFile", drop the hasFile field and choose False
+						(or use the NOT badge on the condition instead).
+					</div>
+				</div>
+			</div>
+
+		</div>
+	</div>
 </div>

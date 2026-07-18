@@ -326,3 +326,38 @@ way as IChannel/IScheduledTask — no manual registration needed. Matches
 the official dev.emby.media "Creating Api Endpoints" doc pattern exactly.
 Confirmed working for both GET (Get(TRequest)) and POST
 (Post(TRequest)) handler methods on the same service class.
+
+
+Addendum: Custom Drag-and-Drop UI in Plugin Pages
+(Rule-builder session — generalized for any future Emby plugin needing a custom interactive HTML/JS page)
+Native HTML5 Drag-and-Drop is unreliable inside Emby's webview
+Confirmed via extensive live testing: the standard draggable="true" / dragstart / dragover / drop / dataTransfer API produces inconsistent, hard-to-diagnose failures in Emby's client webview — universal "no entry" cursors regardless of what's under the pointer, drop targets that silently reject valid drops in some containers but not others, and drag operations that appear to grab unrelated sibling elements. Root causes identified across the session:
+
+dataTransfer.types is not reliably readable during dragover in this environment — some drop-target-acceptance logic that checks e.dataTransfer.types before drop fires will silently fail even though the drag itself is real.
+dropEffect must be explicitly set in every dragover handler, not just effectAllowed at dragstart. The cursor icon (including the universal "not allowed" symbol) is governed by whether dropEffect matches effectAllowed on the current dragover event — omitting this makes every drop target look rejected even when the underlying accept logic is correct.
+Even with both fixed, native DnD initiation itself proved flaky in this specific client (symptoms: dragging one element visually appeared to drag several; cursor never resolved to a valid state anywhere).
+
+Recommendation for any future Emby plugin page needing drag-and-drop: skip native HTML5 DnD entirely and build on raw Pointer Events instead. This is the approach that ultimately worked reliably:
+
+pointerdown on a drag source starts the operation — create a floating "ghost" element (position: fixed, pointer-events: none) that follows the cursor via a pointermove listener on document.
+Maintain a simple in-memory registry of drop targets: { el, acceptedKinds[], onDrop(value, ...) }. On every pointermove/pointerup, use document.elementFromPoint(x, y) to find what's under the cursor, then filter the registry for targets whose element contains that point and whose acceptedKinds matches the kind of thing currently being dragged.
+When multiple registered targets can legitimately contain the same point (e.g. nested containers, one inside another), pick the most deeply nested match — the one that does not itself contain any other match. Getting this containment check backwards (picking the match that is contained by another, rather than the one that contains none) silently biases every drop toward the outermost/root container — a real bug encountered in this session that looked like "nested drops don't work" but was actually "nested drops always redirect to root."
+No dataTransfer object is needed at all with this approach, which sidesteps every one of the native-DnD quirks above.
+Remove draggable="true" from any element also wired for pointer-based dragging — leaving it in place risks the browser attempting its own native drag on the same gesture simultaneously, reintroducing conflicts.
+For reordering within a list (as opposed to inserting a new item), compute the insertion point from the pointer's Y-coordinate relative to existing children (getBoundingClientRect() midpoints), and show an explicit visual insertion-line indicator at that computed position — a container-wide "you're somewhere in here" highlight alone is not enough for the user to know exactly where an item will land, especially once nesting is involved.
+
+position: sticky + border-collapse: collapse renders incorrectly
+A sticky first column/row in a <table> using border-collapse: collapse does not reliably paint opaque — content can visibly bleed through underneath during scroll, even with an explicit solid background-color set. This is a known cross-browser rendering interaction, not a background-color bug. Fix: use border-collapse: separate; border-spacing: 0; instead, combined with background-clip: padding-box and a z-index above sibling cell content on the sticky cell itself.
+Emby theme CSS custom properties — confirmed real variable names
+Emby's built-in theme exposes its accent color as three separate HSL component variables rather than a single flat color, composed via hsla() at the point of use:
+css--theme-primary-color-hue
+--theme-primary-color-saturation
+--theme-primary-color-lightness
+Confirmed real (found via DevTools inspection of .button-submit in the live client). Usage pattern:
+cssbackground: hsla(var(--theme-primary-color-hue), var(--theme-primary-color-saturation), var(--theme-primary-color-lightness), 0.22);
+No dedicated "surface/page background" variable was found — inspecting the main content surface's Computed panel showed no background-related custom property at all, suggesting the page background is painted further up the DOM (body/html) without being exposed as a themeable variable. Guessing a plausible-sounding variable name here would just reintroduce the same "hardcoded and possibly wrong" problem hardcoded hex values have — the correct approach when no confirmed variable exists is to read the actual resolved value at runtime via getComputedStyle(document.body).backgroundColor (falling back up to documentElement, then a last-resort literal) and expose that as a page-local CSS custom property. This stays correct across whatever theme is active without requiring foreknowledge of Emby's internal variable names.
+Design nuance worth carrying forward: not everything should be theme-ified just because the capability exists. Where a plugin UI uses multiple hardcoded colors as deliberate semantic differentiation (e.g. this rule-builder's chip categories — field/operator/logic/not each a different fixed hue so they're distinguishable at a glance), collapsing them all onto the single theme accent color removes that signal rather than improving correctness. Reserve theme-variable usage for elements that are conceptually "primary/accent" (buttons, the most emphasized structural element), and keep intentional multi-color semantic coding as fixed values.
+General debugging discipline for custom plugin pages
+
+IHasWebPages embedded resources (.html/.js) are compiled into the plugin DLL, not served from disk — a browser hard-refresh (even DevTools "disable cache") does not pick up new plugin code. The plugin must be rebuilt and the Emby server restarted before any change is visible, every time. A large share of apparent "the fix didn't work" reports in this session were actually stale-server-code, not real regressions — always confirm via DevTools Sources tab (searching the actually-loaded file for a known-new string/comment) before spending further effort debugging a "still broken" report.
+For anything involving live data shape (matching against a raw API response), a debug JSON view of the exact payload being sent/evaluated — a simple collapsible <pre> populated with JSON.stringify(payload, null, 2) — is disproportionately useful for resolving "is this a client bug or a server bug" questions quickly, versus continued back-and-forth speculation.
