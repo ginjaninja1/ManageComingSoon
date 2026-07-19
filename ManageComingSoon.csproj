@@ -12,10 +12,6 @@
 		<Compile Remove="Services\EmbyLibraryService.cs" />
 		<Compile Remove="UI\AddMovie\Addmoviepageview.polling.cs" />
 	</ItemGroup>
-	<ItemGroup>
-		<None Remove="ComingSoonChannel.png" />
-		<None Remove="ComingSoonChannel2.png" />
-	</ItemGroup>
 	<!--
     Point $(EmbyServerPath) at your Emby Server installation's system/ folder.
     Set it in Directory.Build.props alongside the solution, e.g.:
@@ -23,8 +19,6 @@
   -->
 	<!-- Embed the thumbnail so GetThumbImage() can return it as a stream -->
 	<ItemGroup>
-		<EmbeddedResource Include="ComingSoonChannel.png" />
-		<EmbeddedResource Include="ComingSoonChannel2.png" />
 		<EmbeddedResource Include="thumb.png" />
 
 		<EmbeddedResource Include="comingsoon.mp4" Condition="Exists('comingsoon.mp4')" />
