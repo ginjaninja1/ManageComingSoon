@@ -4,19 +4,17 @@
 		<AssemblyName>Emby.ManageComingSoon</AssemblyName>
 		<RootNamespace>ManageComingSoon</RootNamespace>
 		<LangVersion>latest</LangVersion>
-		<Version>0.0.0.3</Version>
+		<Version>0.0.0.4</Version>
 	</PropertyGroup>
 	<ItemGroup>
-	  <Compile Remove="ChannelEntryPoint.cs" />
-	  <Compile Remove="ChannelUI.cs" />
-	  <Compile Remove="Services\EmbyLibraryService.cs" />
-	  <Compile Remove="UI\AddMovie\Addmoviepageview.polling.cs" />
+		<Compile Remove="ChannelEntryPoint.cs" />
+		<Compile Remove="ChannelUI.cs" />
+		<Compile Remove="Services\EmbyLibraryService.cs" />
+		<Compile Remove="UI\AddMovie\Addmoviepageview.polling.cs" />
 	</ItemGroup>
 	<ItemGroup>
-	  <None Remove="ComingSoonChannel.png" />
-	  <None Remove="ComingSoonChannel2.png" />
-	  <None Remove="Services\Models\Rules\rulesPage.html" />
-	  <None Remove="Services\Models\Rules\rulesPage.js" />
+		<None Remove="ComingSoonChannel.png" />
+		<None Remove="ComingSoonChannel2.png" />
 	</ItemGroup>
 	<!--
     Point $(EmbyServerPath) at your Emby Server installation's system/ folder.
@@ -27,16 +25,13 @@
 	<ItemGroup>
 		<EmbeddedResource Include="ComingSoonChannel.png" />
 		<EmbeddedResource Include="ComingSoonChannel2.png" />
-		<EmbeddedResource Include="Services\Models\Rules\rulesPage.html" />
-		<EmbeddedResource Include="Services\Models\Rules\rulesPage.js" />
 		<EmbeddedResource Include="thumb.png" />
-		
+
 		<EmbeddedResource Include="comingsoon.mp4" Condition="Exists('comingsoon.mp4')" />
 	</ItemGroup>
 	<ItemGroup>
 		<PackageReference Include="MediaBrowser.Server.Core" Version="4.9.1.90" />
 		<PackageReference Include="System.Memory" Version="4.6.3" />
-		<PackageReference Include="System.Text.Json" Version="8.0.5" />
 	</ItemGroup>
 	<!-- Optional: auto-copy the DLL to your plugins folder after build -->
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">

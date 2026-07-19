@@ -7,7 +7,6 @@ namespace ManageComingSoon.UI
     using ManageComingSoon.UI.Configuration;
     using ManageComingSoon.UI.MakeLive;
     using ManageComingSoon.UIBaseClasses;
-    using MediaBrowser.Controller.Channels;
     using MediaBrowser.Controller.Library;
     using MediaBrowser.Model.Tasks;
     using MediaBrowser.Model.Logging;
@@ -23,9 +22,7 @@ namespace ManageComingSoon.UI
         private readonly EmbyLibraryAddService addService;
         private readonly EmbyLibraryMakeService makeService;
         private readonly ILibraryManager libraryManager;
-        private readonly IChannelManager channelManager;
         private readonly ITaskManager taskManager;
-        private readonly RadarrChannelIdentityReconciler reconciler;
         private readonly ILogger logger;
         private readonly List<IPluginUIPageController> tabPages;
 
@@ -36,9 +33,7 @@ namespace ManageComingSoon.UI
             EmbyLibraryAddService addService,
             EmbyLibraryMakeService makeService,
             ILibraryManager libraryManager,
-            IChannelManager channelManager,
             ITaskManager taskManager,
-            RadarrChannelIdentityReconciler reconciler,
             ILogger logger)
             : base(pluginInfo.Id)
         {
@@ -48,9 +43,7 @@ namespace ManageComingSoon.UI
             this.addService = addService;
             this.makeService = makeService;
             this.libraryManager = libraryManager;
-            this.channelManager = channelManager;
             this.taskManager = taskManager;
-            this.reconciler = reconciler;
             this.logger = logger;
 
             PageInfo = new PluginPageInfo
@@ -79,11 +72,7 @@ namespace ManageComingSoon.UI
                     _ => new ConfigurationPageView(
                         pluginInfo,
                         plugin,
-                        libraryManager,
-                        channelManager,
-                        taskManager,
-                        reconciler,
-                        logger)),
+                        libraryManager)),
             };
         }
 

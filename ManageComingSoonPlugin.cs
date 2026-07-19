@@ -8,8 +8,6 @@ namespace ManageComingSoon
     using MediaBrowser.Common.Net;
     using MediaBrowser.Common.Plugins;
     using MediaBrowser.Controller;
-    using MediaBrowser.Controller.Channels;
-    using MediaBrowser.Controller.Drawing;
     using MediaBrowser.Controller.Library;
     using MediaBrowser.Controller.Persistence;
     using MediaBrowser.Controller.Providers;
@@ -24,7 +22,7 @@ namespace ManageComingSoon
     using System.Collections.Generic;
     using System.IO;
 
-    public class ManageComingSoonPlugin : BasePlugin<PluginConfiguration>, IHasThumbImage, IHasUIPages, IHasWebPages
+    public class ManageComingSoonPlugin : BasePlugin<PluginConfiguration>, IHasThumbImage, IHasUIPages
     {
         private static readonly Guid PluginId = new Guid("3A1F9C82-7D4E-4B5A-9F2D-1E8C6A3B0D74");
 
@@ -34,7 +32,6 @@ namespace ManageComingSoon
         private List<IPluginUIPageController> pages;
         private EmbyLibraryAddService addServiceInstance;
         private EmbyLibraryMakeService makeServiceInstance;
-        private RadarrChannelIdentityReconciler reconcilerInstance;
 
         public static ManageComingSoonPlugin Instance { get; private set; }
 
@@ -67,34 +64,6 @@ namespace ManageComingSoon
                    ?? Stream.Null;
         }
 
-        // -----------------------------------------------------------------
-        // IHasWebPages — serves the custom Radarr Rules editor as a raw
-        // embedded HTML/JS page, since the drag-and-drop-free but still
-        // dynamic rule-list UI can't be built with Emby.Web.GenericEdit
-        // (the mechanism ConfigurationUI/ConfigurationPageView use).
-        // Pattern confirmed against Emby.AutoOrganize's autoorganizetv.html
-        // / autoorganizetv.js embedded-resource pair.
-        // -----------------------------------------------------------------
-        public IEnumerable<PluginPageInfo> GetPages()
-        {
-            return new[]
-            {
-                new PluginPageInfo
-                {
-                    Name = "RadarrRulesPage",
-                    EmbeddedResourcePath = GetType().Namespace + ".Services.Models.Rules.rulesPage.html",
-                    EnableInMainMenu = true,
-                    DisplayName = "Radarr Coming Soon Rules",
-                    MenuIcon = "rule_folder"
-                },
-                new PluginPageInfo
-                {
-                    Name = "RadarrRulesPageJs",
-                    EmbeddedResourcePath = GetType().Namespace + ".Services.Models.Rules.rulesPage.js"
-                }
-            };
-        }
-
         public IReadOnlyCollection<IPluginUIPageController> UIPageControllers
         {
             get
@@ -108,9 +77,6 @@ namespace ManageComingSoon
                     var httpClient = this.appHost.Resolve<IHttpClient>();
                     var jsonSerializer = this.appHost.Resolve<IJsonSerializer>();
                     var libraryMonitor = this.appHost.Resolve<ILibraryMonitor>();
-                    var channelManager = this.appHost.Resolve<IChannelManager>();
-                    var imageProcessor = this.appHost.Resolve<IImageProcessor>();
-                    var appPaths = this.appHost.Resolve<IApplicationPaths>();
 
                     var tmdbService = new TmdbService(httpClient, jsonSerializer, this.logger);
 
@@ -138,17 +104,10 @@ namespace ManageComingSoon
                             providerManager, fileSystem, libraryMonitor, this.logger);
 
                         MakeLiveTask.SetDependencies(
-    this.makeServiceInstance, this.logger,
-    () => this.Configuration.EmbyApiKey,
-    () => this.Configuration.MakeLiveDeleteStubFileMaxFileSize,
-    () => this.Configuration.UnlockTags);
-                    }
-
-                    if (this.reconcilerInstance == null)
-                    {
-                        this.reconcilerInstance = new RadarrChannelIdentityReconciler(
-                            channelManager, libraryManager, imageProcessor,
-                            appPaths, this.logger);
+                            this.makeServiceInstance, this.logger,
+                            () => this.Configuration.EmbyApiKey,
+                            () => this.Configuration.MakeLiveDeleteStubFileMaxFileSize,
+                            () => this.Configuration.UnlockTags);
                     }
 
                     this.pages = new List<IPluginUIPageController>
@@ -160,9 +119,7 @@ namespace ManageComingSoon
                             this.addServiceInstance,
                             this.makeServiceInstance,
                             libraryManager,
-                            channelManager,
                             this.taskManager,
-                            this.reconcilerInstance,
                             this.logger)
                     };
                 }
