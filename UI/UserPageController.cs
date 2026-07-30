@@ -1,31 +1,29 @@
 ﻿namespace ManageComingSoon.UI
 {
+    using System;
     using System.Threading.Tasks;
     using ManageComingSoon.Services;
-    using ManageComingSoon.UI.AddMovie;
+    using ManageComingSoon.UI.UserAddMovie;
     using ManageComingSoon.UIBaseClasses;
-    using MediaBrowser.Model.Plugins;
-    using MediaBrowser.Model.Plugins.UI.Views;
+    using MediaBrowser.Model.Dto;
     using MediaBrowser.Model.Logging;
+    using MediaBrowser.Model.Plugins;
+    using MediaBrowser.Model.Plugins.UI;
+    using MediaBrowser.Model.Plugins.UI.Views;
     using MediaBrowser.Model.Tasks;
 
-    // Ordinary-user entry point: Add Coming Soon only, no Make Live / Configuration
-    // tabs. Distinct PageInfo.Name from MainPageController - confirmed via ILSpy
-    // that PageId = "{first 6 hex of plugin Id}:{PageInfo.Name}", so this only
-    // needs a distinct Name, not any other registration change.
-    //
-    // Shares the same singleton services (tmdbService, addService, taskManager,
-    // logger) as MainPageController's Add Coming Soon tab. This is safe: the
-    // actual add/search state lives in AddMovieTracker (static, lock-protected,
-    // persisted), not in these service instances or in the view itself, so
-    // admins and ordinary users hitting this concurrently share one consistent
-    // queue rather than each getting a divergent view of it.
-    internal class UserPageController : ControllerBase
+    /// <summary>
+    /// Ordinary-user web entry point.
+    ///
+    /// This controller is intentionally separate from MainPageController and
+    /// does not expose the admin tabs. Its view uses command responses only;
+    /// it never depends on UIViewInfoChanged or SendMessageToAdminSessions.
+    /// </summary>
+    internal sealed class UserPageController : ControllerBase, IPluginPageSecurity
     {
         private readonly PluginInfo pluginInfo;
         private readonly ManageComingSoonPlugin plugin;
         private readonly TmdbService tmdbService;
-        private readonly EmbyLibraryAddService addService;
         private readonly ITaskManager taskManager;
         private readonly ILogger logger;
 
@@ -41,16 +39,15 @@
             this.pluginInfo = pluginInfo;
             this.plugin = plugin;
             this.tmdbService = tmdbService;
-            this.addService = addService;
             this.taskManager = taskManager;
             this.logger = logger;
 
             PageInfo = new PluginPageInfo
             {
                 Name = "ManageComingSoonUser",
+                DisplayName = "Add Coming Soon Movie",
                 EnableInMainMenu = false,
                 EnableInUserMenu = true,
-                DisplayName = "Manage Coming Soon",
                 MenuIcon = "upcoming",
                 IsMainConfigPage = false,
             };
@@ -60,9 +57,24 @@
 
         public override Task<IPluginUIView> CreateDefaultPageView()
         {
-            IPluginUIView view = new AddMoviePageView(
-                pluginInfo, plugin, tmdbService, addService, logger, taskManager);
+            IPluginUIView view = new UserAddMoviePageView(
+                this.pluginInfo,
+                this.plugin,
+                this.tmdbService,
+                this.taskManager,
+                this.logger);
+
             return Task.FromResult(view);
+        }
+
+        public Task CheckIsUserAuthorised(UserDto user, IPluginUIView requestedView)
+        {
+            if (user == null)
+            {
+                throw new UnauthorizedAccessException("You must be signed in to use this page.");
+            }
+
+            return Task.CompletedTask;
         }
     }
 }
