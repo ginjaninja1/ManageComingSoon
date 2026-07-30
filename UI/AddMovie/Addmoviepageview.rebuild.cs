@@ -218,7 +218,26 @@ namespace ManageComingSoon.UI.AddMovie
             else if (confident > 0 || added > 0)
                 status = ItemStatus.Succeeded;
 
-            SetOverallStatus(string.Join("  /  ", parts), status);
+            string statusMessage = string.Join("  /  ", parts);
+
+            // Live push-refresh only ever reaches admin sessions (confirmed
+            // SDK limitation - see Evidence.md). Non-admin users won't see
+            // this footer, or the row list, update on its own after an
+            // action - only on next page open/refresh. Say so plainly rather
+            // than let it look broken.
+            bool isAdmin = this.User != null
+                && this.User.Policy != null
+                && this.User.Policy.IsAdministrator;
+
+            if (!isAdmin)
+            {
+                const string refreshHint = "Refresh the page to see the latest status.";
+                statusMessage = string.IsNullOrEmpty(statusMessage)
+                    ? refreshHint
+                    : statusMessage + "  /  " + refreshHint;
+            }
+
+            SetOverallStatus(statusMessage, status);
         }
 
         private void SetOverallStatus(string message, ItemStatus status)

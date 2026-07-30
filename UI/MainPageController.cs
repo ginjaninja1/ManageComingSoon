@@ -6,15 +6,22 @@ namespace ManageComingSoon.UI
     using ManageComingSoon.UI.AddMovie;
     using ManageComingSoon.UI.Configuration;
     using ManageComingSoon.UI.MakeLive;
+    using ManageComingSoon.UI.Security;
     using ManageComingSoon.UIBaseClasses;
     using MediaBrowser.Controller.Library;
     using MediaBrowser.Model.Tasks;
+    using MediaBrowser.Model.Dto;
     using MediaBrowser.Model.Logging;
     using MediaBrowser.Model.Plugins;
     using MediaBrowser.Model.Plugins.UI;
     using MediaBrowser.Model.Plugins.UI.Views;
 
-    internal class MainPageController : ControllerBase, IHasTabbedUIPages
+    // Admin-only entry point: Add Coming Soon (default tab, admin-only via
+    // this class implementing IPluginPageSecurity) + Make Live + Configuration
+    // (each independently admin-only via TabPageController's adminOnly flag).
+    // EnableInUserMenu intentionally left false/unset - see UserPageController
+    // for the ordinary-user-facing entry point.
+    internal class MainPageController : ControllerBase, IHasTabbedUIPages, IPluginPageSecurity
     {
         private readonly PluginInfo pluginInfo;
         private readonly ManageComingSoonPlugin plugin;
@@ -52,19 +59,20 @@ namespace ManageComingSoon.UI
                 EnableInMainMenu = true,
                 DisplayName = "Manage Coming Soon",
                 MenuIcon = "upcoming",
-                IsMainConfigPage = true,
+                IsMainConfigPage = false,
             };
 
             this.tabPages = new List<IPluginUIPageController>
             {
-                // Tab 2: Make Live
+                // Tab 2: Make Live - admin only
                 new TabPageController(
                     pluginInfo,
                     nameof(MakeLivePageView),
                     "Make Live",
-                    _ => new MakeLivePageView(pluginInfo, plugin, makeService, taskManager, logger)),
+                    _ => new MakeLivePageView(pluginInfo, plugin, makeService, taskManager, logger),
+                    adminOnly: true),
 
-                // Tab 3: Configuration
+                // Tab 3: Configuration - admin only
                 new TabPageController(
                     pluginInfo,
                     nameof(ConfigurationPageView),
@@ -72,7 +80,8 @@ namespace ManageComingSoon.UI
                     _ => new ConfigurationPageView(
                         pluginInfo,
                         plugin,
-                        libraryManager)),
+                        libraryManager),
+                    adminOnly: true),
             };
         }
 
@@ -87,5 +96,12 @@ namespace ManageComingSoon.UI
         }
 
         public IReadOnlyList<IPluginUIPageController> TabPageControllers => tabPages.AsReadOnly();
+
+        // Gates the top-level controller itself (its default Add Coming Soon
+        // view) admin-only. Tabs are gated separately - see TabPageController.
+        public Task CheckIsUserAuthorised(UserDto user, IPluginUIView requestedView)
+        {
+            return AdminOnlyPageSecurity.CheckIsAdmin(user, requestedView);
+        }
     }
 }

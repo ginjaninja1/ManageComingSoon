@@ -112,6 +112,7 @@ namespace ManageComingSoon
 
                     this.pages = new List<IPluginUIPageController>
                     {
+                        // Admin: Add Coming Soon + Make Live + Configuration tabs
                         new MainPageController(
                             GetPluginInfo(),
                             this,
@@ -120,7 +121,16 @@ namespace ManageComingSoon
                             this.makeServiceInstance,
                             libraryManager,
                             this.taskManager,
-                            this.logger)
+                            this.logger),
+
+                        // Ordinary users: Add Coming Soon only, EnableInUserMenu=true
+                        new UserPageController(
+                            GetPluginInfo(),
+                            this,
+                            tmdbService,
+                            this.addServiceInstance,
+                            this.taskManager,
+                            this.logger),
                     };
                 }
 
