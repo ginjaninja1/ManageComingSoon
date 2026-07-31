@@ -12,13 +12,6 @@
     using MediaBrowser.Model.Plugins.UI.Views;
     using MediaBrowser.Model.Tasks;
 
-    /// <summary>
-    /// Ordinary-user web entry point.
-    ///
-    /// This controller is intentionally separate from MainPageController and
-    /// does not expose the admin tabs. Its view uses command responses only;
-    /// it never depends on UIViewInfoChanged or SendMessageToAdminSessions.
-    /// </summary>
     internal sealed class UserPageController : ControllerBase, IPluginPageSecurity
     {
         private readonly PluginInfo pluginInfo;
@@ -45,11 +38,11 @@
             PageInfo = new PluginPageInfo
             {
                 Name = "ManageComingSoonUser",
-                DisplayName = "Add Coming Soon Movie",
+                DisplayName = "Manage Coming Soon",
                 EnableInMainMenu = false,
                 EnableInUserMenu = true,
                 MenuIcon = "upcoming",
-                IsMainConfigPage = false,
+                IsMainConfigPage = false
             };
         }
 
@@ -63,17 +56,13 @@
                 this.tmdbService,
                 this.taskManager,
                 this.logger);
-
             return Task.FromResult(view);
         }
 
         public Task CheckIsUserAuthorised(UserDto user, IPluginUIView requestedView)
         {
             if (user == null)
-            {
                 throw new UnauthorizedAccessException("You must be signed in to use this page.");
-            }
-
             return Task.CompletedTask;
         }
     }

@@ -5,43 +5,51 @@
     using Emby.Web.GenericEdit.Elements;
     using Emby.Web.GenericEdit.Elements.List;
 
-    /// <summary>
-    /// Deliberately small user-facing surface.
-    /// All visible changes are returned by RunCommand in the same HTTP response.
-    /// </summary>
     public sealed class UserAddMovieUI : EditableOptionsBase
     {
-        public override string EditorTitle => "Add a Coming Soon Movie";
+        public override string EditorTitle => "Add Coming Soon Movies";
 
         public override string EditorDescription =>
-            "Enter a title and optional year. Search TMDB to normalise the title, " +
-            "or submit it manually without a provider match.";
+            "Enter one movie, or several separated by |. Add ;Year after a title when useful, " +
+            "for example Dune Part Two;2024|Gladiator II. TMDB searches and normal page actions " +
+            "update immediately. Server additions normally finish quickly, but background completion " +
+            "cannot be pushed to ordinary-user pages; use Refresh Status when a submitted item still shows as pending.";
 
-        [DisplayName("Movie title")]
+        [DisplayName("Movie name")]
+        [Description("or Movie1;Year|Movie2|Movie3;Year...")]
         public string MovieName { get; set; } = string.Empty;
 
         [DisplayName("Year (optional)")]
         public string ReleaseYear { get; set; } = string.Empty;
 
-        public ButtonItem SearchButton { get; set; } =
-            new ButtonItem("Search TMDB")
+        public ButtonItem AddViaTmdbButton { get; set; } =
+            new ButtonItem("Add via TMDB Match")
             {
                 Icon = IconNames.search,
-                Data1 = "Search",
-                CommandId = "Search",
+                Data1 = "AddViaTmdb",
+                CommandId = "AddViaTmdb"
             };
 
-        public ButtonItem SubmitManualButton { get; set; } =
-            new ButtonItem("Submit Without Matching")
+        public ButtonItem AddManualButton { get; set; } =
+            new ButtonItem("Add Manual")
             {
                 StandardIcon = StandardIcons.Add,
-                Data1 = "SubmitManual",
-                CommandId = "SubmitManual",
+                Data1 = "AddManual",
+                CommandId = "AddManual"
             };
 
-        public GenericItemList Results { get; set; } = new GenericItemList();
+        public GenericItemList ActiveList { get; set; } = new GenericItemList();
+        public GenericItemList CompletedList { get; set; } = new GenericItemList();
 
-        public StatusItem Status { get; set; } =
+        public ButtonItem RefreshStatusButton { get; set; } =
+            new ButtonItem("Refresh Status")
+            {
+                StandardIcon = StandardIcons.Refresh,
+                Data1 = "RefreshStatus",
+                CommandId = "RefreshStatus"
+            };
+
+        public StatusItem OverallStatus { get; set; } =
             new StatusItem("Status", string.Empty, ItemStatus.Unavailable);
     }
 }
