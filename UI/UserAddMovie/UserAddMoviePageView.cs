@@ -31,6 +31,7 @@
 
         private readonly ManageComingSoonPlugin plugin;
         private readonly TmdbService tmdbService;
+        private readonly EmbyLibraryAddService libraryService;
         private readonly ITaskManager taskManager;
         private readonly ILogger logger;
         private readonly HashSet<string> expandedCandidates =
@@ -42,12 +43,14 @@
             PluginInfo pluginInfo,
             ManageComingSoonPlugin plugin,
             TmdbService tmdbService,
+            EmbyLibraryAddService libraryService,
             ITaskManager taskManager,
             ILogger logger)
             : base(pluginInfo.Id)
         {
             this.plugin = plugin;
             this.tmdbService = tmdbService;
+            this.libraryService = libraryService;
             this.taskManager = taskManager;
             this.logger = logger;
             this.ContentData = new UserAddMovieUI();
@@ -489,12 +492,26 @@
                 return;
             }
 
+            // TMDBID library-wide check — catches cases the folder-name-based
+            // check below cannot: the same movie already Coming Soon under a
+            // different folder name, or already available in the main
+            // library outside the Coming Soon workflow.
+            int tmdbId = entry.SelectedMatch != null ? entry.SelectedMatch.Id : 0;
+            var tmdbConflict = this.libraryService.CheckTmdbLibraryConflict(tmdbId);
+            if (tmdbConflict.Kind != EmbyLibrarySharedService.TmdbConflictKind.None)
+            {
+                entry.HasDestinationConflict = true;
+                entry.ConflictReason = tmdbConflict.Reason;
+                entry.IncludedInBulkAdd = false;
+                return;
+            }
+
             try
             {
                 if (Directory.Exists(destination))
                 {
                     entry.HasDestinationConflict = true;
-                    entry.ConflictReason = "The destination folder already exists: " + destination;
+                    entry.ConflictReason = "Movie already coming soon";
                     entry.IncludedInBulkAdd = false;
                 }
             }

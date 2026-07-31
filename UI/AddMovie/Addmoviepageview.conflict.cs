@@ -83,21 +83,34 @@ namespace ManageComingSoon.UI.AddMovie
             }
             else
             {
-                // Disk check — only runs if no in-list duplicate found
-                try
+                // TMDBID library-wide check — catches cases the folder-name-based
+                // checks cannot: the same movie already Coming Soon under a
+                // different folder name, or already available in the main
+                // library outside the Coming Soon workflow.
+                var tmdbConflict = this.libraryService.CheckTmdbLibraryConflict(entry.ConfirmedTmdbId);
+                if (tmdbConflict.Kind != EmbyLibrarySharedService.TmdbConflictKind.None)
                 {
-                    if (Directory.Exists(destFolder))
-                    {
-                        conflict = true;
-                        reason = string.Format("Path already in use: {0}", destFolder);
-                    }
+                    conflict = true;
+                    reason = tmdbConflict.Reason;
                 }
-                catch (Exception ex)
+                else
                 {
-                    this.logger.Warn(
-                        "Destination check failed for '{0}': {1}",
-                        entry.ConfirmedTitle, ex.Message);
-                    return false;
+                    // Disk check — only runs if no in-list duplicate or TMDBID conflict found
+                    try
+                    {
+                        if (Directory.Exists(destFolder))
+                        {
+                            conflict = true;
+                            reason = "Movie already coming soon";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        this.logger.Warn(
+                            "Destination check failed for '{0}': {1}",
+                            entry.ConfirmedTitle, ex.Message);
+                        return false;
+                    }
                 }
             }
 

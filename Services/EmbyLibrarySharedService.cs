@@ -16,6 +16,7 @@ namespace ManageComingSoon.Services
     using MediaBrowser.Controller.Library;
     using MediaBrowser.Controller.Persistence;
     using MediaBrowser.Controller.Providers;
+    using MediaBrowser.Model.Entities;
     using MediaBrowser.Model.IO;
     using MediaBrowser.Model.Logging;
 
@@ -91,6 +92,79 @@ namespace ManageComingSoon.Services
                 Recursive = true,
             };
             return this.libraryManager.GetItemList(query);
+        }
+
+        // -----------------------------------------------------------------------
+        // TMDB library-wide conflict check
+        // -----------------------------------------------------------------------
+
+        public enum TmdbConflictKind
+        {
+            None,
+            AlreadyComingSoon,
+            AlreadyAvailable
+        }
+
+        public class TmdbConflictResult
+        {
+            public TmdbConflictKind Kind { get; set; } = TmdbConflictKind.None;
+            public string Reason { get; set; } = string.Empty;
+        }
+
+        /// <summary>
+        /// Library-wide (no tag filter, no folder-name assumption) lookup by TMDB
+        /// provider id. Complements the folder-name-based conflict checks used by
+        /// both Add Movie pathways: this catches a same-TMDBID movie that already
+        /// exists under a different folder name, wherever it lives in the library.
+        ///   - A match carrying ActiveTagText -> AlreadyComingSoon.
+        ///   - A match without the tag        -> AlreadyAvailable.
+        /// Returns Kind = None for tmdbId &lt;= 0 (manual/no-match entries never
+        /// carry a real TMDB id) or if the query itself throws.
+        /// </summary>
+        public TmdbConflictResult CheckTmdbLibraryConflict(int tmdbId)
+        {
+            if (tmdbId <= 0) return new TmdbConflictResult();
+
+            var query = new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { "Movie" },
+                Recursive = true,
+                AnyProviderIdEquals = new List<KeyValuePair<string, string>>
+                {
+                    new KeyValuePair<string, string>(
+                        MetadataProviders.Tmdb.ToString(),
+                        tmdbId.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                }
+            };
+
+            BaseItem[] matches;
+            try
+            {
+                matches = this.libraryManager.GetItemList(query);
+            }
+            catch (Exception ex)
+            {
+                this.logger.Warn(
+                    "TMDB library conflict check failed for TmdbId {0}: {1}",
+                    tmdbId, ex.Message);
+                return new TmdbConflictResult();
+            }
+
+            if (matches == null || matches.Length == 0) return new TmdbConflictResult();
+
+            string tag = ActiveTagText;
+            bool alreadyComingSoon = matches.Any(m =>
+                m.Tags != null && m.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase));
+
+            return new TmdbConflictResult
+            {
+                Kind = alreadyComingSoon
+                    ? TmdbConflictKind.AlreadyComingSoon
+                    : TmdbConflictKind.AlreadyAvailable,
+                Reason = alreadyComingSoon
+                    ? "Movie already coming soon"
+                    : "Movie already available"
+            };
         }
 
         /// <summary>

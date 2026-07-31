@@ -65,3 +65,8 @@ Confirmed patterns and class behaviours for use in future Emby plugin developmen
   clean "not authorised" style response, but its exact HTTP-status mapping
   was not independently confirmed via ILSpy - verify actual behaviour once
   deployed.
+
+  Provider-id (TMDB/IMDB/etc.) library lookups
+BaseItem implements IHasProviderIds, exposing a ProviderIds (ProviderIdDictionary) property. InternalItemsQuery has a matching AnyProviderIdEquals collection (ICollection<KeyValuePair<string, string>>) for querying items by external id without loading the whole library and filtering in memory.
+The key string to use in that KeyValuePair is the enum member name from MediaBrowser.Model.Entities.MetadataProviders (e.g. Tmdb, Imdb, Tvdb), obtained via .ToString() — not a hand-typed literal, since the enum is the only confirmed source of the exact casing/spelling. Confirmed via ILSpy on v4.9.1.90.
+This lookup is independent of any tag- or folder-based query: it finds a matching item anywhere in the library, which is useful for detecting "this external id already exists somewhere" conditions that a folder-name or tag-scoped query would miss (e.g. the same title already present under a differently-formatted folder name, or outside the folder/tag scope being searched).

@@ -17,6 +17,7 @@
         private readonly PluginInfo pluginInfo;
         private readonly ManageComingSoonPlugin plugin;
         private readonly TmdbService tmdbService;
+        private readonly EmbyLibraryAddService addService;
         private readonly ITaskManager taskManager;
         private readonly ILogger logger;
 
@@ -32,6 +33,7 @@
             this.pluginInfo = pluginInfo;
             this.plugin = plugin;
             this.tmdbService = tmdbService;
+            this.addService = addService;
             this.taskManager = taskManager;
             this.logger = logger;
 
@@ -54,6 +56,7 @@
                 this.pluginInfo,
                 this.plugin,
                 this.tmdbService,
+                this.addService,
                 this.taskManager,
                 this.logger);
             return Task.FromResult(view);
