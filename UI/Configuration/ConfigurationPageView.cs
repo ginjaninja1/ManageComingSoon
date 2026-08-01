@@ -48,8 +48,10 @@ namespace ManageComingSoon.UI.Configuration
             ui.MakeLiveDeleteStubFile = cfg.MakeLiveDeleteStubFile;
             ui.MakeLiveDeleteStubFileMaxFileSize = cfg.MakeLiveDeleteStubFileMaxFileSize;
             ui.UnlockTags = cfg.UnlockTags;
-            ui.ComingSoonTargetKey = cfg.ComingSoonTargetKey;
-            ui.MakeLiveTargetKey = cfg.MakeLiveTargetKey;
+            ui.MovieComingSoonTargetKey = cfg.MovieComingSoonTargetKey;
+            ui.TvComingSoonTargetKey = cfg.TvComingSoonTargetKey;
+            ui.MovieMakeLiveTargetKey = cfg.MovieMakeLiveTargetKey;
+            ui.TvMakeLiveTargetKey = cfg.TvMakeLiveTargetKey;
             ui.ComingSoonStubVideoPath = cfg.ComingSoonStubVideoPath;
             ui.EmbyApiKey = cfg.EmbyApiKey;
             ui.ComingSoonTagText = string.IsNullOrEmpty(cfg.ComingSoonTagText)
@@ -102,8 +104,10 @@ namespace ManageComingSoon.UI.Configuration
             cfg.MakeLiveDeleteStubFile = ui.MakeLiveDeleteStubFile;
             cfg.MakeLiveDeleteStubFileMaxFileSize = ui.MakeLiveDeleteStubFileMaxFileSize;
             cfg.UnlockTags = ui.UnlockTags;
-            cfg.ComingSoonTargetKey = ui.ComingSoonTargetKey;
-            cfg.MakeLiveTargetKey = ui.MakeLiveTargetKey;
+            cfg.MovieComingSoonTargetKey = ui.MovieComingSoonTargetKey;
+            cfg.TvComingSoonTargetKey = ui.TvComingSoonTargetKey;
+            cfg.MovieMakeLiveTargetKey = ui.MovieMakeLiveTargetKey;
+            cfg.TvMakeLiveTargetKey = ui.TvMakeLiveTargetKey;
             cfg.EmbyApiKey = (ui.EmbyApiKey ?? string.Empty).Trim();
 
             // ---- Coming Soon tag --------------------------------------------------
@@ -243,8 +247,8 @@ namespace ManageComingSoon.UI.Configuration
 
         private void PopulateLibraryOptions(ConfigurationUI ui)
         {
-            var comingSoonOptions = new List<EditorSelectOption>();
-            var makeLiveOptions = new List<EditorSelectOption>();
+            var movieOptions = new List<EditorSelectOption>();
+            var tvOptions = new List<EditorSelectOption>();
 
             try
             {
@@ -256,9 +260,8 @@ namespace ManageComingSoon.UI.Configuration
                         string.Equals(folder.CollectionType, "movies",
                             StringComparison.OrdinalIgnoreCase);
 
-                    bool isMakeLiveLib = isMovieLib ||
-                        string.Equals(folder.CollectionType, "tvshows",
-                            StringComparison.OrdinalIgnoreCase);
+                    bool isTvLib = string.Equals(folder.CollectionType, "tvshows",
+                        StringComparison.OrdinalIgnoreCase);
 
                     foreach (var loc in folder.Locations)
                     {
@@ -266,10 +269,9 @@ namespace ManageComingSoon.UI.Configuration
                         string name = folder.Name + " \u2192 " + loc;
 
                         if (isMovieLib)
-                            comingSoonOptions.Add(new EditorSelectOption(key, name));
-
-                        if (isMakeLiveLib || isMovieLib)
-                            makeLiveOptions.Add(new EditorSelectOption(key, name));
+                            movieOptions.Add(new EditorSelectOption(key, name));
+                        if (isTvLib)
+                            tvOptions.Add(new EditorSelectOption(key, name));
                     }
                 }
             }
@@ -278,8 +280,8 @@ namespace ManageComingSoon.UI.Configuration
                 // Library enumeration failed; options stay empty
             }
 
-            ui.ComingSoonLibraryOptions = comingSoonOptions;
-            ui.MakeLiveLibraryOptions = makeLiveOptions;
+            ui.MovieLibraryOptions = movieOptions;
+            ui.TvLibraryOptions = tvOptions;
         }
 
         // -----------------------------------------------------------------------

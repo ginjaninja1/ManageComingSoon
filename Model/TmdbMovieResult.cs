@@ -11,6 +11,7 @@ namespace ManageComingSoon.Model
     [DataContract]
     public class TmdbMovieResult
     {
+        public ComingSoonMediaType MediaType { get; set; }
         [DataMember(Name = "id")]
         public int Id { get; set; }
 
@@ -20,12 +21,21 @@ namespace ManageComingSoon.Model
         [DataMember(Name = "original_title")]
         public string OriginalTitle { get; set; } = string.Empty;
 
+        [DataMember(Name = "name")]
+        public string Name { get; set; } = string.Empty;
+
+        [DataMember(Name = "original_name")]
+        public string OriginalName { get; set; } = string.Empty;
+
         [DataMember(Name = "overview")]
         public string Overview { get; set; } = string.Empty;
 
         // Search endpoint returns "release_date" (confirmed by PowerShell script)
         [DataMember(Name = "release_date")]
         public string ReleaseDate { get; set; } = string.Empty;
+
+        [DataMember(Name = "first_air_date")]
+        public string FirstAirDate { get; set; } = string.Empty;
 
         [DataMember(Name = "poster_path")]
         public string PosterPath { get; set; } = string.Empty;
@@ -46,5 +56,14 @@ namespace ManageComingSoon.Model
 
         public string PosterUrl(string baseUrl = "https://image.tmdb.org/t/p/w342")
             => string.IsNullOrEmpty(PosterPath) ? string.Empty : baseUrl + PosterPath;
+
+        public void Normalize(ComingSoonMediaType mediaType)
+        {
+            MediaType = mediaType;
+            if (mediaType != ComingSoonMediaType.TvShow) return;
+            Title = Name ?? string.Empty;
+            OriginalTitle = OriginalName ?? string.Empty;
+            ReleaseDate = FirstAirDate ?? string.Empty;
+        }
     }
 }

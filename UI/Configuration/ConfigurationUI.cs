@@ -35,13 +35,22 @@ namespace ManageComingSoon.UI.Configuration
             new CaptionItem("Coming Soon Settings");
 
         [Browsable(false)]
-        public IEnumerable<EditorSelectOption> ComingSoonLibraryOptions { get; set; } =
+        public IEnumerable<EditorSelectOption> MovieLibraryOptions { get; set; } =
             new List<EditorSelectOption>();
 
-        [DisplayName("Coming Soon Target Library / Path")]
-        [SelectItemsSource(nameof(ComingSoonLibraryOptions))]
-        [AutoPostBack("ConfigurationChanged", nameof(ComingSoonTargetKey))]
-        public string ComingSoonTargetKey { get; set; } = string.Empty;
+        [Browsable(false)]
+        public IEnumerable<EditorSelectOption> TvLibraryOptions { get; set; } =
+            new List<EditorSelectOption>();
+
+        [DisplayName("Movie Coming Soon Library / Path")]
+        [SelectItemsSource(nameof(MovieLibraryOptions))]
+        [AutoPostBack("ConfigurationChanged", nameof(MovieComingSoonTargetKey))]
+        public string MovieComingSoonTargetKey { get; set; } = string.Empty;
+
+        [DisplayName("TV Coming Soon Library / Path")]
+        [SelectItemsSource(nameof(TvLibraryOptions))]
+        [AutoPostBack("ConfigurationChanged", nameof(TvComingSoonTargetKey))]
+        public string TvComingSoonTargetKey { get; set; } = string.Empty;
 
         [DisplayName("Choose your own placeholder video file")]
         [AutoPostBack("ConfigurationChanged", nameof(ComingSoonStubVideoPath))]
@@ -66,7 +75,7 @@ namespace ManageComingSoon.UI.Configuration
 
         public SpacerItem Spacer3 { get; set; } = new SpacerItem();
 
-        [DisplayName("Tag for coming soon movies")]
+        [DisplayName("Tag for Coming Soon titles")]
         [AutoPostBack("ConfigurationChanged", nameof(ComingSoonTagText))]
         public string ComingSoonTagText { get; set; } = "Coming Soon";
 
@@ -75,17 +84,19 @@ namespace ManageComingSoon.UI.Configuration
         public CaptionItem CaptionMakeLiveTarget { get; set; } =
             new CaptionItem("Make Live Settings");
 
-        [Browsable(false)]
-        public IEnumerable<EditorSelectOption> MakeLiveLibraryOptions { get; set; } =
-            new List<EditorSelectOption>();
-
-        [DisplayName("Make Live Target Library / Path")]
-        [SelectItemsSource(nameof(MakeLiveLibraryOptions))]
+        [DisplayName("Movie Make Live Library / Path")]
+        [SelectItemsSource(nameof(MovieLibraryOptions))]
         [EnabledCondition(nameof(MakeLiveMoveToNewLocation), SimpleCondition.IsTrue)]
-        [AutoPostBack("ConfigurationChanged", nameof(MakeLiveTargetKey))]
-        public string MakeLiveTargetKey { get; set; } = string.Empty;
+        [AutoPostBack("ConfigurationChanged", nameof(MovieMakeLiveTargetKey))]
+        public string MovieMakeLiveTargetKey { get; set; } = string.Empty;
 
-        [DisplayName("Move movie to a new library/path when made live")]
+        [DisplayName("TV Make Live Library / Path")]
+        [SelectItemsSource(nameof(TvLibraryOptions))]
+        [EnabledCondition(nameof(MakeLiveMoveToNewLocation), SimpleCondition.IsTrue)]
+        [AutoPostBack("ConfigurationChanged", nameof(TvMakeLiveTargetKey))]
+        public string TvMakeLiveTargetKey { get; set; } = string.Empty;
+
+        [DisplayName("Move title to its Make Live library/path when made live")]
         [AutoPostBack("ConfigurationChanged", nameof(MakeLiveMoveToNewLocation))]
         public bool MakeLiveMoveToNewLocation { get; set; } = false;
 
@@ -101,8 +112,8 @@ namespace ManageComingSoon.UI.Configuration
         [EnabledCondition(nameof(MakeLiveDeleteStubFile), SimpleCondition.IsTrue)]
         public int MakeLiveDeleteStubFileMaxFileSize { get; set; } = 100;
 
-        [DisplayName("Unlock Tags on Movie in Metadata Editor")]
-        [Description("Revert the Tags lock instantiated by Add Movie")]
+        [DisplayName("Unlock Tags on title in Metadata Editor")]
+        [Description("Revert the Tags lock created when the Coming Soon title was added")]
         [AutoPostBack("ConfigurationChanged", nameof(UnlockTags))]
         public bool UnlockTags { get; set; } = true;
 

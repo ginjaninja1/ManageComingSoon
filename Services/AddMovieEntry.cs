@@ -58,6 +58,7 @@ namespace ManageComingSoon.Services
     // -----------------------------------------------------------------------
     public class AddMovieCandidate
     {
+        public ComingSoonMediaType MediaType { get; set; }
         public int TmdbId { get; set; }
         public string Title { get; set; } = string.Empty;
         public string ReleaseDate { get; set; } = string.Empty;
@@ -90,12 +91,13 @@ namespace ManageComingSoon.Services
                 : "https://image.tmdb.org/t/p/w342" + PosterPath;
 
         public string TmdbUrl()
-            => string.Format("https://www.themoviedb.org/movie/{0}", TmdbId);
+            => string.Format("https://www.themoviedb.org/{0}/{1}", MediaType.TmdbPathSegment(), TmdbId);
 
         /// <summary>Build from a full TmdbMovieResult (used when storing candidates).</summary>
         public static AddMovieCandidate FromTmdb(TmdbMovieResult r)
             => new AddMovieCandidate
             {
+                MediaType = r.MediaType,
                 TmdbId = r.Id,
                 Title = r.Title ?? string.Empty,
                 ReleaseDate = r.ReleaseDate ?? string.Empty,
@@ -114,6 +116,7 @@ namespace ManageComingSoon.Services
         public AddMovieCandidate Clone()
             => new AddMovieCandidate
             {
+                MediaType = MediaType,
                 TmdbId = TmdbId,
                 Title = Title,
                 ReleaseDate = ReleaseDate,
@@ -129,6 +132,7 @@ namespace ManageComingSoon.Services
     // -----------------------------------------------------------------------
     public class AddMovieEntry
     {
+        public ComingSoonMediaType MediaType { get; set; }
         // ---- Identity -------------------------------------------------------
         public string Id { get; set; } = string.Empty;
 
@@ -282,6 +286,7 @@ namespace ManageComingSoon.Services
             => new AddMovieEntry
             {
                 Id = Id,
+                MediaType = MediaType,
                 SearchName = SearchName,
                 SearchYear = SearchYear,
                 CreatedAt = CreatedAt,

@@ -156,13 +156,14 @@ namespace ManageComingSoon.Services
         // -----------------------------------------------------------------------
 
         /// <summary>[UI] Creates a new entry in Searching state and persists it.</summary>
-        public static AddMovieEntry Add(string searchName, int? searchYear)
+        public static AddMovieEntry Add(string searchName, int? searchYear, ComingSoonMediaType mediaType)
         {
             var entry = new AddMovieEntry
             {
                 Id = Guid.NewGuid().ToString("N"),
                 SearchName = searchName ?? string.Empty,
                 SearchYear = searchYear,
+                MediaType = mediaType,
                 CreatedAt = DateTime.UtcNow,
                 State = AddMovieState.Searching,
             };
@@ -181,13 +182,14 @@ namespace ManageComingSoon.Services
         /// [UI] Creates a new manually-confirmed entry using the user's typed
         /// title/year, bypassing provider search.
         /// </summary>
-        public static AddMovieEntry AddManual(string searchName, int? searchYear)
+        public static AddMovieEntry AddManual(string searchName, int? searchYear, ComingSoonMediaType mediaType)
         {
             var entry = new AddMovieEntry
             {
                 Id = Guid.NewGuid().ToString("N"),
                 SearchName = searchName ?? string.Empty,
                 SearchYear = searchYear,
+                MediaType = mediaType,
                 CreatedAt = DateTime.UtcNow,
                 State = AddMovieState.Confident,
                 ConfirmedTmdbId = 0,

@@ -15,8 +15,8 @@ namespace ManageComingSoon.UI.MakeLive
     {
         public override string EditorTitle => "Make Live";
         public override string EditorDescription =>
-            "Coming Soon movies are analysed automatically. Toggle the movies you want to make " +
-            "live, then click Make Live on a row or use Make All Live to process every toggled movie.";
+            "Coming Soon movies and TV shows are analysed automatically. Toggle the titles you want to make " +
+            "live, then click Make Live on a row or use Make All Live to process every selected title.";
 
         public ButtonItem RefreshListButton { get; set; } =
             new ButtonItem("Refresh List")

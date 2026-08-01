@@ -61,7 +61,7 @@ namespace ManageComingSoon.UI.AddMovie
             if (entry == null || entry.State != AddMovieState.Confident) return false;
 
             string targetPath = ConfigurationPageView.PathFromKey(
-                this.plugin.Configuration.ComingSoonTargetKey);
+                GetComingSoonTargetKey(entry.MediaType));
             if (string.IsNullOrEmpty(targetPath)) return false;
 
             string safeName = EmbyLibrarySharedService.BuildComingSoonFolderName(

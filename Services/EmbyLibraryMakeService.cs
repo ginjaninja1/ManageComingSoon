@@ -96,6 +96,11 @@ namespace ManageComingSoon.Services
             /* Complete                 */ 100
         };
 
+        // TV discovery normally settles quickly, but retains a long final pass
+        // for slower servers. Used for both the preserved-Series confirmation
+        // and the destination-derived Episode confirmation.
+        private static readonly int[] TvMakeLiveDiscoveryPassSeconds = { 2, 7, 60 };
+
         // -----------------------------------------------------------------------
         // Pipeline context — carries all captured/derived state between stages
         // -----------------------------------------------------------------------
@@ -160,6 +165,7 @@ namespace ManageComingSoon.Services
 
         public async Task<MakeLiveResult> MakeLivePipelineAsync(
             string folderPath,
+            ComingSoonMediaType mediaType,
             string targetPath,
             bool deleteStub,
             int maxStubFileSizeMb,
@@ -172,6 +178,12 @@ namespace ManageComingSoon.Services
             string logContext = null,
             Action<string> onStageMessage = null)
         {
+            if (mediaType == ComingSoonMediaType.TvShow)
+                return await MakeTvShowLivePipelineAsync(
+                    folderPath, targetPath, deleteStub, maxStubFileSizeMb,
+                    unlockTags, apiKey, progress, token, logContext, onStageMessage)
+                    .ConfigureAwait(false);
+
             var ctx = new MoveContext
             {
                 SourceFolderPath = folderPath,
@@ -333,6 +345,433 @@ namespace ManageComingSoon.Services
                 return Fail(ctx, MakeLiveStage.Complete,
                     "Unhandled exception — see server log: " + ex.Message);
             }
+        }
+
+        private async Task<MakeLiveResult> MakeTvShowLivePipelineAsync(
+            string folderPath, string targetPath, bool deleteStub, int maxStubFileSizeMb,
+            bool unlockTags, string apiKey, IProgress<double> progress,
+            CancellationToken token, string logContext, Action<string> onStageMessage)
+        {
+            string log = string.IsNullOrEmpty(logContext) ? string.Empty : " " + logContext;
+            BaseItem sourceSeries = FindSeriesByFolder(folderPath, requireComingSoonTag: true);
+            if (sourceSeries == null)
+                return new MakeLiveResult { Success = false, FailedAtStage = MakeLiveStage.CaptureState,
+                    FailureReason = "Could not resolve the tagged Series for this folder." };
+
+            string destination = string.IsNullOrEmpty(targetPath)
+                ? folderPath : Path.Combine(targetPath, Path.GetFileName(folderPath));
+            long originalSeriesInternalId = sourceSeries.InternalId;
+            Guid originalSeriesId = sourceSeries.Id;
+            BaseItem[] sourceSeasons = FindSeasonsForSeries(sourceSeries.InternalId);
+            BaseItem[] sourceEpisodes = FindEpisodesForSeries(folderPath, sourceSeasons);
+
+            this.logger.Info(
+                "[TvMakeLive/CaptureGraph]{0} Series InternalId={1} Id={2} ParentId={3} Path='{4}'; " +
+                "captured {5} Season(s), {6} Episode(s).",
+                log, sourceSeries.InternalId, sourceSeries.Id, sourceSeries.ParentId,
+                sourceSeries.Path, sourceSeasons.Length, sourceEpisodes.Length);
+            foreach (BaseItem season in sourceSeasons)
+                LogTvGraphItem("TvMakeLive/CaptureGraph", "Season", season, log);
+            foreach (BaseItem episode in sourceEpisodes)
+                LogTvGraphItem("TvMakeLive/CaptureGraph", "Episode", episode, log);
+
+            BaseItem sourceStubEpisode = sourceEpisodes.FirstOrDefault(item =>
+                item.ParentIndexNumber == 1 && item.IndexNumber == 1);
+            if (sourceStubEpisode == null)
+                return new MakeLiveResult { Success = false, FailedAtStage = MakeLiveStage.CaptureState,
+                    FailureReason = "Could not resolve the Episode with SeasonNumber=1 and EpisodeNumber=1 from Emby's database." };
+            long originalStubEpisodeInternalId = sourceStubEpisode.InternalId;
+            string stubPath = sourceStubEpisode.Path;
+            string targetEpisodePath = RebaseTvPath(stubPath, folderPath, destination);
+            this.logger.Info(
+                "[TvMakeLive/CaptureGraph]{0} Selected placeholder from Episode database row: " +
+                "InternalId={1} Path='{2}' -> target Path='{3}'.",
+                log, originalStubEpisodeInternalId, stubPath, targetEpisodePath);
+
+            if (deleteStub)
+            {
+                if (string.IsNullOrEmpty(stubPath) || !File.Exists(stubPath))
+                    return new MakeLiveResult { Success = false, FailedAtStage = MakeLiveStage.CaptureState,
+                        FailureReason = "The S01E01 placeholder file could not be found." };
+                if (new FileInfo(stubPath).Length > (long)maxStubFileSizeMb * 1024 * 1024)
+                    return new MakeLiveResult { Success = false, FailedAtStage = MakeLiveStage.CaptureState,
+                        FailureReason = "The S01E01 file exceeds the configured placeholder size limit." };
+            }
+
+            try
+            {
+                Report(progress, MakeLiveStage.CaptureState);
+                var http = await ResolveHttpAsync(apiKey, "TvMakeLive", token).ConfigureAwait(false);
+                if (http == null)
+                    return new MakeLiveResult { Success = false, FailedAtStage = MakeLiveStage.ReadinessCheck,
+                        FailureReason = "Could not resolve the local Emby API URL." };
+
+                CollectionFolder sourceLibrary = FindCollectionFolder(folderPath);
+                CollectionFolder targetLibrary = string.IsNullOrEmpty(targetPath)
+                    ? sourceLibrary : FindCollectionFolder(targetPath);
+                if (targetLibrary == null)
+                    return new MakeLiveResult { Success = false, FailedAtStage = MakeLiveStage.ReadinessCheck,
+                        FailureReason = "Could not resolve the target TV library." };
+
+                Folder targetSeriesParent = null;
+                if (!string.IsNullOrEmpty(targetPath))
+                {
+                    targetSeriesParent = ResolveTvSeriesParent(targetPath, targetLibrary, folderPath, log);
+                    if (targetSeriesParent == null)
+                        return new MakeLiveResult { Success = false, FailedAtStage = MakeLiveStage.EstablishTargetIds,
+                            FailureReason = "Could not resolve the database parent used by Series in the target TV library." };
+
+                    onStageMessage?.Invoke("Moving TV show folder…");
+                    if (Directory.Exists(destination))
+                        return new MakeLiveResult { Success = false, FailedAtStage = MakeLiveStage.MoveFiles,
+                            FailureReason = "The destination show folder already exists." };
+
+                    this.libraryMonitor.ReportFileSystemChangeBeginning(folderPath);
+                    this.libraryMonitor.ReportFileSystemChangeBeginning(destination);
+                    try { MoveTvShowFolder(folderPath, destination); }
+                    finally
+                    {
+                        this.libraryMonitor.ReportFileSystemChangeComplete(folderPath, false);
+                        this.libraryMonitor.ReportFileSystemChangeComplete(destination, false);
+                    }
+                    stubPath = targetEpisodePath;
+
+                    onStageMessage?.Invoke("Rehoming TV database objects…");
+                    sourceSeries.Path = destination;
+                    sourceSeries.ParentId = targetSeriesParent.InternalId;
+                    this.itemRepository.SaveItem(sourceSeries, token);
+                    this.libraryManager.UpdateItem(
+                        sourceSeries, targetSeriesParent, ItemUpdateType.MetadataEdit, null);
+                    LogTvGraphItem("TvMakeLive/RehomeGraph", "Series (persisted)", sourceSeries, log);
+
+                    foreach (BaseItem season in sourceSeasons)
+                    {
+                        // A flat TV layout gives Emby a virtual Season. Its parent
+                        // remains the preserved Series, so neither identity nor
+                        // ParentId changes during the move.
+                        LogTvGraphItem("TvMakeLive/RehomeGraph", "Season (unchanged)", season, log);
+                    }
+
+                    foreach (BaseItem episode in sourceEpisodes)
+                    {
+                        string oldPath = episode.Path;
+                        episode.Path = RebaseTvPath(oldPath, folderPath, destination);
+                        this.itemRepository.SaveItem(episode, token);
+                        this.libraryManager.UpdateItem(
+                            episode, episode.GetParent(), ItemUpdateType.MetadataEdit, null);
+                        this.logger.Info(
+                            "[TvMakeLive/RehomeGraph]{0} Episode InternalId={1} ParentId={2} path '{3}' -> '{4}'.",
+                            log, episode.InternalId, episode.ParentId, oldPath, episode.Path);
+                    }
+                }
+                Report(progress, MakeLiveStage.MoveFiles);
+
+                BaseItem targetSeries = sourceSeries;
+                if (!string.IsNullOrEmpty(targetPath))
+                {
+                    BaseItem persistedSeries = this.libraryManager.GetItemById(originalSeriesInternalId);
+                    BaseItem persistedEpisode = this.libraryManager.GetItemById(originalStubEpisodeInternalId);
+                    LogTvGraphItem("TvMakeLive/PreRefresh", "Series by original ID", persistedSeries, log);
+                    LogTvGraphItem("TvMakeLive/PreRefresh", "Episode by original ID", persistedEpisode, log);
+
+                    if (persistedSeries == null || persistedEpisode == null ||
+                        !string.Equals(persistedSeries.Path, destination, StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(persistedEpisode.Path, targetEpisodePath, StringComparison.OrdinalIgnoreCase))
+                        return new MakeLiveResult { Success = false, FailedAtStage = MakeLiveStage.LibraryUpdateAndRefresh,
+                            FailureReason = "The preserved TV objects did not persist their destination paths before refresh." };
+
+                    onStageMessage?.Invoke("Validating rehomed TV show…");
+                    await CallRefreshEndpointAsync(
+                        http.Value.Client, http.Value.BaseUrl, targetLibrary.InternalId,
+                        "TV Library (target)", apiKey, MetadataRefreshMode.ValidationOnly,
+                        "TvMakeLive/DiscoverTarget", token).ConfigureAwait(false);
+
+                    bool seriesConfirmed = await WaitForConditionAsync(
+                        () =>
+                        {
+                            targetSeries = FindSeriesByFolder(destination, false);
+                            return targetSeries != null &&
+                                targetSeries.InternalId == originalSeriesInternalId;
+                        },
+                        token, "TvMakeLive/ConfirmTargetSeries",
+                        TvMakeLiveDiscoveryPassSeconds,
+                        onPass: null, logContext: log).ConfigureAwait(false);
+                    if (!seriesConfirmed)
+                        return new MakeLiveResult { Success = false, FailedAtStage = MakeLiveStage.ConfirmTargetState,
+                            FailureReason = "The original Series ID was not confirmed at the destination." };
+                }
+
+                BaseItem originalEpisodeAfterNormalization =
+                    this.libraryManager.GetItemById(originalStubEpisodeInternalId);
+                LogTvGraphItem("TvMakeLive/PostTargetNormalization",
+                    "Original Episode by ID", originalEpisodeAfterNormalization, log);
+
+                BaseItem targetEpisode = FindAllEpisodesByPath(targetEpisodePath).FirstOrDefault();
+                if (targetEpisode == null)
+                {
+                    // For a flat TV layout, Season and Episode are derived
+                    // children. The first validation preserves the explicitly
+                    // rehomed Series but removes the old virtual Season/Episode
+                    // graph because those child identities came from the source
+                    // path. Emby does not revisit the same file in that pass, so
+                    // run one more CollectionFolder validation to materialize
+                    // the destination-derived children beneath the preserved
+                    // Series.
+                    this.logger.Info(
+                        "[TvMakeLive/RediscoverDerivedChildren]{0} No Episode currently has destination Path '{1}'. " +
+                        "Running a second target CollectionFolder ValidationOnly pass.",
+                        log, targetEpisodePath);
+                    onStageMessage?.Invoke("Discovering destination episode…");
+                    await CallRefreshEndpointAsync(
+                        http.Value.Client, http.Value.BaseUrl, targetLibrary.InternalId,
+                        "TV Library (derived child rediscovery)", apiKey,
+                        MetadataRefreshMode.ValidationOnly,
+                        "TvMakeLive/RediscoverDerivedChildren", token).ConfigureAwait(false);
+                }
+
+                bool episodeConfirmed = await WaitForConditionAsync(
+                    () =>
+                    {
+                        targetEpisode = FindAllEpisodesByPath(targetEpisodePath).FirstOrDefault();
+                        return targetEpisode != null;
+                    },
+                    token, "TvMakeLive/ConfirmTargetEpisode",
+                    TvMakeLiveDiscoveryPassSeconds,
+                    onPass: null, logContext: log).ConfigureAwait(false);
+                if (!episodeConfirmed)
+                {
+                    LogTvGraphItem("TvMakeLive/ConfirmTargetEpisodeFailed",
+                        "Episode by original ID",
+                        this.libraryManager.GetItemById(originalStubEpisodeInternalId), log);
+                    BaseItem[] pathMatches = FindAllEpisodesByPath(targetEpisodePath);
+                    this.logger.Warn(
+                        "[TvMakeLive/ConfirmTargetEpisodeFailed]{0} Episodes whose stored Path equals '{1}': [{2}].",
+                        log, targetEpisodePath,
+                        string.Join(",", pathMatches.Select(item =>
+                            item.InternalId + "/" + item.Id)));
+                    return new MakeLiveResult { Success = false, FailedAtStage = MakeLiveStage.ConfirmTargetState,
+                        FailureReason = "S01E01 was not materialized beneath the preserved Series at the destination." };
+                }
+
+                LogTvGraphItem("TvMakeLive/Confirmed", "Series", targetSeries, log);
+                LogTvGraphItem("TvMakeLive/Confirmed", "Episode", targetEpisode, log);
+
+                BaseItem[] seriesAtDestination = FindAllSeriesByPath(destination);
+                BaseItem[] episodesAtDestination = FindAllEpisodesByPath(targetEpisodePath);
+                bool duplicateDetected = seriesAtDestination.Length > 1 || episodesAtDestination.Length > 1;
+                this.logger.Info(
+                    "[TvMakeLive/IdentityCheck]{0} destination Series IDs=[{1}] Episode IDs=[{2}]; " +
+                    "expected preserved Series={3}; source Episode={4}, destination Episode={5}; " +
+                    "Episode identity preserved={6}; duplicate={7}.",
+                    log,
+                    string.Join(",", seriesAtDestination.Select(item => item.InternalId.ToString())),
+                    string.Join(",", episodesAtDestination.Select(item => item.InternalId.ToString())),
+                    originalSeriesInternalId, originalStubEpisodeInternalId,
+                    targetEpisode.InternalId,
+                    targetEpisode.InternalId == originalStubEpisodeInternalId,
+                    duplicateDetected);
+                if (duplicateDetected)
+                    return new MakeLiveResult { Success = false, FailedAtStage = MakeLiveStage.SteadyStateCheck,
+                        FailureReason = "Duplicate Series or Episode objects were created at the destination." };
+
+                onStageMessage?.Invoke("Removing Coming Soon tag…");
+                targetSeries.Tags = (targetSeries.Tags ?? new string[0])
+                    .Where(t => !string.Equals(t, ActiveTagText, StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (unlockTags && targetSeries.LockedFields != null)
+                    targetSeries.LockedFields = targetSeries.LockedFields
+                        .Where(f => f != MediaBrowser.Model.Entities.MetadataFields.Tags).ToArray();
+                this.itemRepository.SaveItem(targetSeries, token);
+                this.libraryManager.UpdateItem(
+                    targetSeries, targetSeries.GetParent(), ItemUpdateType.MetadataEdit, null);
+
+                if (sourceSeries.InternalId != targetSeries.InternalId)
+                {
+                    sourceSeries.Tags = (sourceSeries.Tags ?? new string[0])
+                        .Where(t => !string.Equals(t, ActiveTagText, StringComparison.OrdinalIgnoreCase)).ToArray();
+                    if (unlockTags && sourceSeries.LockedFields != null)
+                        sourceSeries.LockedFields = sourceSeries.LockedFields
+                            .Where(f => f != MediaBrowser.Model.Entities.MetadataFields.Tags).ToArray();
+                    this.itemRepository.SaveItem(sourceSeries, token);
+                    this.libraryManager.UpdateItem(
+                        sourceSeries, sourceSeries.GetParent(), ItemUpdateType.MetadataEdit, null);
+                }
+                Report(progress, MakeLiveStage.LibraryUpdateAndRefresh);
+
+                if (deleteStub && File.Exists(stubPath)) File.Delete(stubPath);
+
+                await CallRefreshEndpointAsync(
+                    http.Value.Client, http.Value.BaseUrl, targetLibrary.InternalId,
+                    "TV Library (target final)", apiKey, MetadataRefreshMode.Default,
+                    "TvMakeLive/RefreshTarget", token).ConfigureAwait(false);
+                if (sourceLibrary != null && sourceLibrary.InternalId != targetLibrary.InternalId)
+                    await CallRefreshEndpointAsync(
+                        http.Value.Client, http.Value.BaseUrl, sourceLibrary.InternalId,
+                        "TV Library (source cleanup)", apiKey, MetadataRefreshMode.ValidationOnly,
+                        "TvMakeLive/RefreshSource", token).ConfigureAwait(false);
+
+                bool tagGone = await WaitForConditionAsync(
+                    () => FindSeriesByFolder(folderPath, true) == null &&
+                        FindSeriesByFolder(destination, true) == null,
+                    token, "TvMakeLive/ConfirmTagRemoval",
+                    NoNewContentFirstWaitSeconds, NoNewContentSecondWaitSeconds,
+                    logContext: log).ConfigureAwait(false);
+                if (!tagGone)
+                    return new MakeLiveResult { Success = false, FailedAtStage = MakeLiveStage.SteadyStateCheck,
+                        FailureReason = "A tagged Series still remains after the move." };
+
+                Report(progress, MakeLiveStage.Complete);
+                this.logger.Info("[TvPipeline/Complete]{0} Series '{1}' made live at '{2}'.",
+                    log, targetSeries.Name, destination);
+                return new MakeLiveResult { Success = true, FinalItemId = targetSeries.Id,
+                    IdentityPreserved = targetSeries.InternalId == originalSeriesInternalId &&
+                        targetSeries.Id == originalSeriesId,
+                    DuplicateDetected = duplicateDetected };
+            }
+            catch (Exception ex)
+            {
+                this.logger.ErrorException("[TvPipeline]{0} Failed", ex, log);
+                return new MakeLiveResult { Success = false, FailedAtStage = MakeLiveStage.Complete,
+                    FailureReason = ex.Message };
+            }
+        }
+
+        private BaseItem[] FindSeasonsForSeries(long seriesInternalId)
+        {
+            return this.libraryManager.GetItemList(new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { "Season" },
+                Recursive = true,
+            }).Where(item => item.ParentId == seriesInternalId).ToArray();
+        }
+
+        private BaseItem[] FindEpisodesForSeries(string seriesPath, BaseItem[] seasons)
+        {
+            var seasonIds = new HashSet<long>(seasons.Select(item => item.InternalId));
+            return this.libraryManager.GetItemList(new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { "Episode" },
+                Recursive = true,
+            }).Where(item => seasonIds.Contains(item.ParentId) || IsPathInside(item.Path, seriesPath)).ToArray();
+        }
+
+        private BaseItem[] FindAllSeriesByPath(string seriesPath)
+        {
+            return this.libraryManager.GetItemList(new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { "Series" },
+                Recursive = true,
+            }).Where(item => string.Equals(
+                item.Path?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                seriesPath?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase)).ToArray();
+        }
+
+        private BaseItem[] FindAllEpisodesByPath(string episodePath)
+        {
+            return this.libraryManager.GetItemList(new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { "Episode" },
+                Recursive = true,
+            }).Where(item => string.Equals(item.Path, episodePath, StringComparison.OrdinalIgnoreCase)).ToArray();
+        }
+
+        private Folder ResolveTvSeriesParent(
+            string targetLibraryPath, CollectionFolder targetLibrary,
+            string sourceSeriesPath, string log)
+        {
+            BaseItem sampleSeries = this.libraryManager.GetItemList(new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { "Series" },
+                Recursive = true,
+            }).FirstOrDefault(item =>
+                item.InternalId != 0 &&
+                !string.Equals(item.Path, sourceSeriesPath, StringComparison.OrdinalIgnoreCase) &&
+                IsPathInside(item.Path, targetLibraryPath));
+
+            long parentId = sampleSeries?.ParentId ?? targetLibrary.InternalId;
+            Folder parent = this.libraryManager.GetItemById(parentId) as Folder;
+            this.logger.Info(
+                "[TvMakeLive/ResolveTargetParent]{0} Target CollectionFolder InternalId={1} Path='{2}'; " +
+                "sample Series InternalId={3} ParentId={4} Path='{5}'; selected parent InternalId={6} Type={7} Path='{8}'.",
+                log, targetLibrary.InternalId, targetLibrary.Path,
+                sampleSeries?.InternalId.ToString() ?? "none",
+                sampleSeries?.ParentId.ToString() ?? "none", sampleSeries?.Path ?? "none",
+                parent?.InternalId.ToString() ?? "none", parent?.GetType().Name ?? "none",
+                parent?.Path ?? "none");
+            return parent;
+        }
+
+        private static bool IsPathInside(string candidatePath, string rootPath)
+        {
+            if (string.IsNullOrEmpty(candidatePath) || string.IsNullOrEmpty(rootPath)) return false;
+            string root = rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return candidatePath.StartsWith(root + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string RebaseTvPath(string path, string sourceRoot, string destinationRoot)
+        {
+            if (string.IsNullOrEmpty(path)) return path;
+            string relative = path.Substring(sourceRoot.TrimEnd(
+                Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Length)
+                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return Path.Combine(destinationRoot, relative);
+        }
+
+        private void LogTvGraphItem(string stage, string label, BaseItem item, string log)
+        {
+            if (item == null)
+            {
+                this.logger.Warn("[{0}]{1} {2}: <null>", stage, log, label);
+                return;
+            }
+
+            BaseItem parent = null;
+            try { parent = item.GetParent(); }
+            catch (Exception ex)
+            {
+                this.logger.Warn("[{0}]{1} {2} parent lookup failed: {3}", stage, log, label, ex.Message);
+            }
+            this.logger.Info(
+                "[{0}]{1} {2}: InternalId={3} Id={4} Type={5} ParentId={6} " +
+                "ParentInternalId={7} ParentType={8} SeasonNumber={9} EpisodeNumber={10} " +
+                "Path='{11}' Tags=[{12}].",
+                stage, log, label, item.InternalId, item.Id, item.GetType().Name,
+                item.ParentId, parent?.InternalId.ToString() ?? "none",
+                parent?.GetType().Name ?? "none",
+                item.ParentIndexNumber?.ToString() ?? "none",
+                item.IndexNumber?.ToString() ?? "none", item.Path ?? "none",
+                string.Join(",", item.Tags ?? new string[0]));
+        }
+
+        private static void MoveTvShowFolder(string source, string destination)
+        {
+            if (string.Equals(Path.GetPathRoot(source), Path.GetPathRoot(destination),
+                StringComparison.OrdinalIgnoreCase))
+            {
+                Directory.Move(source, destination);
+                return;
+            }
+
+            Directory.CreateDirectory(destination);
+            foreach (var directory in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
+            {
+                string relative = directory.Substring(source.Length)
+                    .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                Directory.CreateDirectory(Path.Combine(destination, relative));
+            }
+            foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
+            {
+                string relative = file.Substring(source.Length)
+                    .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                string targetFile = Path.Combine(destination, relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(targetFile));
+                File.Move(file, targetFile);
+            }
+            foreach (var directory in Directory.GetDirectories(source, "*", SearchOption.AllDirectories)
+                .OrderByDescending(p => p.Length))
+                if (!Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory);
+            if (!Directory.EnumerateFileSystemEntries(source).Any()) Directory.Delete(source);
         }
 
         // -----------------------------------------------------------------------

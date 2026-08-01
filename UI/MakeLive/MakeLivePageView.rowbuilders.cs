@@ -35,6 +35,7 @@ namespace ManageComingSoon.UI.MakeLive
     using System.Threading.Tasks;
     using Emby.Web.GenericEdit.Elements;
     using Emby.Web.GenericEdit.Elements.List;
+    using ManageComingSoon.Model;
     using ManageComingSoon.Services;
     using ManageComingSoon.UI.Configuration;
     using ManageComingSoon.UIBaseClasses.Views;
@@ -97,6 +98,7 @@ namespace ManageComingSoon.UI.MakeLive
             string namePart = entry.Year > 0
                 ? string.Format("{0} ({1})", entry.ItemName, entry.Year)
                 : entry.ItemName;
+            namePart = string.Format("[{0}] {1}", entry.MediaType.DisplayName(), namePart);
 
             string sourceLib = !string.IsNullOrEmpty(entry.FolderPath)
                 ? Path.GetDirectoryName(entry.FolderPath) ?? entry.FolderPath
@@ -224,8 +226,8 @@ namespace ManageComingSoon.UI.MakeLive
                 ? entry.CompletedAt.Value.ToLocalTime().ToString("dd MMM yyyy HH:mm")
                 : string.Empty;
             string primary = string.IsNullOrEmpty(datePart)
-                ? string.Format("{0}{1}", entry.ItemName, yearPart)
-                : string.Format("{0}{1}  \u2014  {2}", entry.ItemName, yearPart, datePart);
+                ? string.Format("[{0}] {1}{2}", entry.MediaType.DisplayName(), entry.ItemName, yearPart)
+                : string.Format("[{0}] {1}{2}  \u2014  {3}", entry.MediaType.DisplayName(), entry.ItemName, yearPart, datePart);
 
             string srcParent = !string.IsNullOrEmpty(entry.FolderPath)
                 ? Path.GetDirectoryName(entry.FolderPath) ?? entry.FolderPath
@@ -288,8 +290,8 @@ namespace ManageComingSoon.UI.MakeLive
             var item = new GenericListItem(
                 IconNames.video_library,
                 entry.Year > 0
-                    ? string.Format("{0} ({1})", entry.ItemName, entry.Year)
-                    : entry.ItemName,
+                    ? string.Format("[{0}] {1} ({2})", entry.MediaType.DisplayName(), entry.ItemName, entry.Year)
+                    : string.Format("[{0}] {1}", entry.MediaType.DisplayName(), entry.ItemName),
                 BuildSecondaryText(entry))
             {
                 IconMode = ItemListIconMode.SmallRegular,

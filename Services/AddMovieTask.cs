@@ -41,8 +41,10 @@
 
 namespace ManageComingSoon.Services
 {
+    using ManageComingSoon.Model;
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using MediaBrowser.Common.Net;
@@ -56,7 +58,7 @@ namespace ManageComingSoon.Services
         private static EmbyLibraryAddService staticLibraryService;
         private static ILogger staticLogger;
         private static Func<string> staticGetApiKey;
-        private static Func<string> staticGetTargetPath;
+        private static Func<ComingSoonMediaType, string> staticGetTargetPath;
         private static Func<string> staticGetCustomStubPath;
 
         public bool IsHidden => true;
@@ -70,7 +72,7 @@ namespace ManageComingSoon.Services
             EmbyLibraryAddService libraryService,
             ILogger logger,
             Func<string> getApiKey,
-            Func<string> getTargetPath,
+            Func<ComingSoonMediaType, string> getTargetPath,
             Func<string> getCustomStubPath)
         {
             staticLibraryService = libraryService;
@@ -99,7 +101,7 @@ namespace ManageComingSoon.Services
         private EmbyLibraryAddService LibraryService => staticLibraryService;
         private ILogger Logger => staticLogger;
 
-        public string Name => "Add Coming Soon Movies";
+        public string Name => "Add Coming Soon Titles";
         public string Description => "Managed by the Manage Coming Soon plugin. Do not schedule manually — trigger via the Add Coming Soon tab only.";
         public string Category => "GinjaNinja Tools";
         public string Key => "ManageComingSoon_AddMovie";
@@ -142,23 +144,11 @@ namespace ManageComingSoon.Services
             }
 
             string apiKey = staticGetApiKey != null ? staticGetApiKey() : null;
-            string targetPath = staticGetTargetPath != null ? staticGetTargetPath() : null;
             string customStubPath = staticGetCustomStubPath != null ? staticGetCustomStubPath() : null;
 
             if (string.IsNullOrEmpty(apiKey))
                 this.Logger.Warn("ManageComingSoon: AddMovieTask starting with NO Emby API key — " +
                     "every item will fail at the library-refresh stage. Set it on the Configuration tab.");
-
-            if (string.IsNullOrEmpty(targetPath))
-            {
-                this.Logger.Warn("ManageComingSoon: AddMovieTask starting with NO target path — " +
-                    "failing all {0} item(s) immediately.", items.Length);
-                foreach (var doomed in items)
-                    AddMovieTracker.SetAddFailed(doomed.Id,
-                        "No target library path configured. Set one on the Configuration tab.");
-                progress.Report(100);
-                return;
-            }
 
             this.Logger.Info("ManageComingSoon: AddMovieTask starting — {0} item(s) to process.", items.Length);
 
@@ -177,12 +167,21 @@ namespace ManageComingSoon.Services
 
                 // Capture loop variables so closures below are unambiguous.
                 var item = items[i];
+                string targetPath = staticGetTargetPath != null ? staticGetTargetPath(item.MediaType) : null;
                 int itemIndex = i;
                 double sliceStart = (double)itemIndex / items.Length * 100.0;
                 double sliceSize = 100.0 / items.Length;
 
                 this.Logger.Info("ManageComingSoon: AddMovieTask processing [{0}/{1}] '{2}'",
                     itemIndex + 1, items.Length, item.ConfirmedTitle);
+
+                if (string.IsNullOrEmpty(targetPath))
+                {
+                    AddMovieTracker.SetAddFailed(item.Id,
+                        "No " + item.MediaType.DisplayName() + " Coming Soon path is configured.");
+                    failCount++;
+                    continue;
+                }
 
                 // Admin task-manager bar: queue position only, independent of
                 // pipeline internals and independent of the row UI.
@@ -254,6 +253,7 @@ namespace ManageComingSoon.Services
 
                         var movie = new ManageComingSoon.Model.TmdbMovieResult
                         {
+                            MediaType = item.MediaType,
                             Id = item.ConfirmedTmdbId,
                             Title = item.ConfirmedTitle,
                             Overview = item.ConfirmedOverview,
@@ -264,7 +264,7 @@ namespace ManageComingSoon.Services
                         };
 
                         var pipelineTask = this.LibraryService.AddComingSoonPipelineAsync(
-                            movie, targetPath, customStubPath, apiKey,
+                            movie, item.MediaType, targetPath, customStubPath, apiKey,
                             itemProgress, onStatus, itemCts.Token);
 
                         var winner = await Task.WhenAny(pipelineTask, fastPathTcs.Task)
@@ -424,10 +424,9 @@ namespace ManageComingSoon.Services
             {
                 try
                 {
-                    var postQueueTargetPath = staticGetTargetPath != null ? staticGetTargetPath() : null;
                     var apiKeyForRefresh = staticGetApiKey != null ? staticGetApiKey() : null;
 
-                    if (!string.IsNullOrEmpty(postQueueTargetPath) && !string.IsNullOrEmpty(apiKeyForRefresh))
+                    if (!string.IsNullOrEmpty(apiKeyForRefresh))
                     {
                         var http = await this.LibraryService.ResolveHttpAsync(
                             apiKeyForRefresh, "AddMovieTask/PostQueueRefresh",
@@ -435,19 +434,26 @@ namespace ManageComingSoon.Services
 
                         if (http != null)
                         {
-                            var library = this.LibraryService.FindCollectionFolderPublic(postQueueTargetPath);
-                            if (library != null)
+                            foreach (var mediaType in items.Select(i => i.MediaType).Distinct())
                             {
+                                // TV metadata was refreshed directly on the
+                                // confirmed Series ID. The TV CollectionFolder
+                                // was used only for filesystem discovery.
+                                if (mediaType == ComingSoonMediaType.TvShow) continue;
+                                var postQueueTargetPath = staticGetTargetPath(mediaType);
+                                var library = this.LibraryService.FindCollectionFolderPublic(postQueueTargetPath);
+                                if (library == null) continue;
                                 await this.LibraryService.CallRefreshEndpointAsync(
                                     http.Value.Client, http.Value.BaseUrl,
-                                    library.InternalId, "Library (Coming Soon, post-queue metadata)",
+                                    library.InternalId,
+                                    mediaType.DisplayName() + " Library (Coming Soon, post-queue metadata)",
                                     apiKeyForRefresh, MetadataRefreshMode.FullRefresh,
                                     "AddMovieTask/PostQueueRefresh",
                                     CancellationToken.None).ConfigureAwait(false);
 
                                 this.Logger.Info(
-                                    "ManageComingSoon: AddMovieTask post-queue Default refresh fired on library InternalId={0}.",
-                                    library.InternalId);
+                                    "ManageComingSoon: AddMovieTask post-queue FullRefresh fired on {0} library InternalId={1}.",
+                                    mediaType.DisplayName(), library.InternalId);
                             }
                         }
                     }

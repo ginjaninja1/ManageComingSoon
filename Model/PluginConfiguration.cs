@@ -8,7 +8,8 @@ namespace ManageComingSoon.Model
         public string TmdbApiKey { get; set; } = string.Empty;
 
         // ---- Coming Soon target: stored as "LibraryName|Path" composite key ----
-        public string ComingSoonTargetKey { get; set; } = string.Empty;
+        public string MovieComingSoonTargetKey { get; set; } = string.Empty;
+        public string TvComingSoonTargetKey { get; set; } = string.Empty;
 
         // ---- Coming Soon placeholder video ----
         // No separate enable flag — an empty path means "use plugin default",
@@ -16,7 +17,8 @@ namespace ManageComingSoon.Model
         public string ComingSoonStubVideoPath { get; set; } = string.Empty;
 
         // ---- Make Live target: stored as "LibraryName|Path" composite key ----
-        public string MakeLiveTargetKey { get; set; } = string.Empty;
+        public string MovieMakeLiveTargetKey { get; set; } = string.Empty;
+        public string TvMakeLiveTargetKey { get; set; } = string.Empty;
 
         // ---- Make Live options ----
         public bool MakeLiveMoveToNewLocation { get; set; } = false;

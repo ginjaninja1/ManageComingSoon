@@ -25,6 +25,15 @@
     /// </summary>
     internal sealed class UserAddMoviePageView : PluginPageView
     {
+        private ComingSoonMediaType SelectedMediaType
+            => string.Equals(UI.MediaType, "TvShow", StringComparison.OrdinalIgnoreCase)
+                ? ComingSoonMediaType.TvShow : ComingSoonMediaType.Movie;
+
+        private string GetComingSoonTargetKey(ComingSoonMediaType mediaType)
+            => mediaType == ComingSoonMediaType.TvShow
+                ? this.plugin.Configuration.TvComingSoonTargetKey
+                : this.plugin.Configuration.MovieComingSoonTargetKey;
+
         private const int MaxBulkEntries = 25;
         private const int MaxDefaultCandidates = 3;
         private const int MaxExpandedCandidates = 10;
@@ -136,7 +145,7 @@
 
             var work = new List<Tuple<UserMovieEntry, BulkMovieEntry>>();
             foreach (var item in parsed)
-                work.Add(Tuple.Create(UserAddMovieTracker.Add(item.Name, item.Year), item));
+                work.Add(Tuple.Create(UserAddMovieTracker.Add(item.Name, item.Year, SelectedMediaType), item));
 
             var searches = work.Select(pair => SearchEntryAsync(pair.Item1, pair.Item2.Name, pair.Item2.Year));
             await Task.WhenAll(searches).ConfigureAwait(false);
@@ -159,7 +168,7 @@
 
             foreach (var item in parsed)
             {
-                var entry = UserAddMovieTracker.AddManual(item.Name, item.Year);
+                var entry = UserAddMovieTracker.AddManual(item.Name, item.Year, SelectedMediaType);
                 CheckDestination(entry);
             }
 
@@ -176,6 +185,7 @@
                     this.plugin.Configuration.TmdbApiKey,
                     name,
                     year,
+                    entry.MediaType,
                     CancellationToken.None).ConfigureAwait(false);
 
                 entry.Candidates = results.Take(MaxExpandedCandidates)
@@ -273,6 +283,7 @@
                     candidate.CastNames = await this.tmdbService.GetCastAsync(
                         this.plugin.Configuration.TmdbApiKey,
                         candidate.Movie.Id,
+                        entry.MediaType,
                         CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception ex)
@@ -334,28 +345,23 @@
         private List<UserMovieEntry> PrepareSubmission(IEnumerable<UserMovieEntry> entries)
         {
             var queued = new List<UserMovieEntry>();
-            string targetPath = ConfigurationPageView.PathFromKey(
-                this.plugin.Configuration.ComingSoonTargetKey);
-            if (string.IsNullOrWhiteSpace(targetPath))
-            {
-                SetStatus("The administrator has not configured a Coming Soon target library.", ItemStatus.Failed);
-                return queued;
-            }
-
             foreach (var entry in entries)
             {
+                string targetPath = ConfigurationPageView.PathFromKey(
+                    GetComingSoonTargetKey(entry.MediaType));
+                if (string.IsNullOrWhiteSpace(targetPath)) continue;
                 CheckDestination(entry);
                 if (entry.HasDestinationConflict) continue;
 
                 AddMovieEntry global;
                 if (entry.IsManual)
                 {
-                    global = AddMovieTracker.AddManual(entry.SearchName, entry.SearchYear);
+                    global = AddMovieTracker.AddManual(entry.SearchName, entry.SearchYear, entry.MediaType);
                 }
                 else
                 {
                     if (entry.SelectedMatch == null) continue;
-                    global = AddMovieTracker.Add(entry.SearchName, entry.SearchYear);
+                    global = AddMovieTracker.Add(entry.SearchName, entry.SearchYear, entry.MediaType);
                     AddMovieTracker.SetConfident(global.Id, entry.SelectedMatch);
                 }
 
@@ -471,7 +477,7 @@
             entry.HasDestinationConflict = false;
             entry.ConflictReason = null;
             string targetPath = ConfigurationPageView.PathFromKey(
-                this.plugin.Configuration.ComingSoonTargetKey);
+                GetComingSoonTargetKey(entry.MediaType));
             if (string.IsNullOrWhiteSpace(targetPath)) return;
 
             string folderName = EmbyLibrarySharedService.BuildComingSoonFolderName(
@@ -497,7 +503,7 @@
             // different folder name, or already available in the main
             // library outside the Coming Soon workflow.
             int tmdbId = entry.SelectedMatch != null ? entry.SelectedMatch.Id : 0;
-            var tmdbConflict = this.libraryService.CheckTmdbLibraryConflict(tmdbId);
+            var tmdbConflict = this.libraryService.CheckTmdbLibraryConflict(tmdbId, entry.MediaType);
             if (tmdbConflict.Kind != EmbyLibrarySharedService.TmdbConflictKind.None)
             {
                 entry.HasDestinationConflict = true;
@@ -535,10 +541,15 @@
         private void RefreshButtonState()
         {
             bool hasKey = !string.IsNullOrWhiteSpace(this.plugin.Configuration.TmdbApiKey);
-            UI.AddViaTmdbButton.IsEnabled = hasKey;
-            UI.AddViaTmdbButton.Caption = hasKey
+            UI.AddViaTmdbButton = new ButtonItem(hasKey
                 ? "Add via TMDB Match"
-                : "TMDB matching unavailable";
+                : "TMDB matching unavailable")
+            {
+                Icon = IconNames.search,
+                Data1 = "AddViaTmdb",
+                CommandId = "AddViaTmdb",
+                IsEnabled = hasKey,
+            };
         }
 
         private void BuildActiveList()
@@ -593,8 +604,8 @@
             var row = new GenericListItem
             {
                 PrimaryText = entry.DisplayYear > 0
-                    ? string.Format("{0} ({1})", entry.DisplayTitle, entry.DisplayYear)
-                    : entry.DisplayTitle,
+                    ? string.Format("[{0}] {1} ({2})", entry.MediaType.DisplayName(), entry.DisplayTitle, entry.DisplayYear)
+                    : string.Format("[{0}] {1}", entry.MediaType.DisplayName(), entry.DisplayTitle),
                 SecondaryText = BuildSecondaryText(entry),
                 IconMode = ItemListIconMode.SmallRegular,
                 Icon = StateIcon(entry.State),
@@ -715,7 +726,8 @@
         private static List<GenericListItem> BuildInfoRows(UserMovieCandidate candidate)
         {
             var rows = new List<GenericListItem>();
-            string url = "https://www.themoviedb.org/movie/" + candidate.Movie.Id.ToString(CultureInfo.InvariantCulture);
+            string url = "https://www.themoviedb.org/" + candidate.Movie.MediaType.TmdbPathSegment() + "/" +
+                candidate.Movie.Id.ToString(CultureInfo.InvariantCulture);
             rows.Add(new GenericListItem(IconNames.open_in_new, "View on TMDB", url)
             {
                 IconMode = ItemListIconMode.SmallRegular,

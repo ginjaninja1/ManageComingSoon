@@ -60,7 +60,7 @@ namespace ManageComingSoon.UI.AddMovie
             if (entry == null || entry.State != AddMovieState.Confident) return false;
 
             string targetPath = ConfigurationPageView.PathFromKey(
-                this.plugin.Configuration.ComingSoonTargetKey);
+                GetComingSoonTargetKey(entry.MediaType));
             if (string.IsNullOrEmpty(targetPath)) return false;
 
             string safeName = EmbyLibrarySharedService.BuildComingSoonFolderName(
@@ -87,7 +87,8 @@ namespace ManageComingSoon.UI.AddMovie
                 // checks cannot: the same movie already Coming Soon under a
                 // different folder name, or already available in the main
                 // library outside the Coming Soon workflow.
-                var tmdbConflict = this.libraryService.CheckTmdbLibraryConflict(entry.ConfirmedTmdbId);
+                var tmdbConflict = this.libraryService.CheckTmdbLibraryConflict(
+                    entry.ConfirmedTmdbId, entry.MediaType);
                 if (tmdbConflict.Kind != EmbyLibrarySharedService.TmdbConflictKind.None)
                 {
                     conflict = true;

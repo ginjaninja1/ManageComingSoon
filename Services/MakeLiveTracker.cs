@@ -5,6 +5,7 @@
 
 namespace ManageComingSoon.Services
 {
+    using ManageComingSoon.Model;
     using ManageComingSoon.Storage;
     using System;
     using System.Collections.Generic;
@@ -37,6 +38,7 @@ namespace ManageComingSoon.Services
     // -----------------------------------------------------------------------
     public class MakeLiveEntry
     {
+        public ComingSoonMediaType MediaType { get; set; }
         public string FolderPath { get; set; }        // original source – the key
         public string ItemName { get; set; }
         public int Year { get; set; }                 // production year; 0 if unknown
@@ -202,7 +204,7 @@ namespace ManageComingSoon.Services
         // -----------------------------------------------------------------------
 
         /// <summary>Called by MakeLiveTask before the move starts.</summary>
-        public static void Register(string folderPath, string itemName, int year)
+        public static void Register(string folderPath, string itemName, int year, ComingSoonMediaType mediaType)
         {
             lock (Lock)
             {
@@ -223,6 +225,7 @@ namespace ManageComingSoon.Services
                     FolderPath = folderPath,
                     ItemName = itemName,
                     Year = year,
+                    MediaType = mediaType,
                     State = MakeLiveState.Moving,
                     Message = "Starting\u2026",
                     StartedAt = DateTime.UtcNow,
@@ -532,7 +535,8 @@ namespace ManageComingSoon.Services
         /// are preserved so that the user's selection survives a LoadAndAnalyse refresh.
         /// </summary>
         public static void UpsertPending(
-            string folderPath, string itemName, int year, MigrationAnalysisResult analysis)
+            string folderPath, string itemName, int year, ComingSoonMediaType mediaType,
+            MigrationAnalysisResult analysis)
         {
             lock (Lock)
             {
@@ -545,6 +549,7 @@ namespace ManageComingSoon.Services
                     // Update in place, preserving the user's toggle choices.
                     existing.ItemName = itemName;
                     existing.Year = year;
+                    existing.MediaType = mediaType;
                     existing.Analysis = analysis;
                     return;
                 }
@@ -554,6 +559,7 @@ namespace ManageComingSoon.Services
                     FolderPath = folderPath,
                     ItemName = itemName,
                     Year = year,
+                    MediaType = mediaType,
                     State = MakeLiveState.Pending,
                     Analysis = analysis,
                     ToggledOn = false,
@@ -666,6 +672,7 @@ namespace ManageComingSoon.Services
         private static readonly object QueueLock = new object();
 
         public static void EnqueueTask(string folderPath, string itemName, int year,
+            ComingSoonMediaType mediaType,
             string targetPath, bool deleteStub, EmbyLibraryMakeService.MakeLiveMode mode,
             string customStubPath)
         {
@@ -675,6 +682,7 @@ namespace ManageComingSoon.Services
                     FolderPath = folderPath,
                     ItemName = itemName,
                     Year = year,
+                    MediaType = mediaType,
                     TargetPath = targetPath,
                     DeleteStub = deleteStub,
                     Mode = mode,
@@ -734,6 +742,7 @@ namespace ManageComingSoon.Services
     // -----------------------------------------------------------------------
     public class PendingMakeLiveItem
     {
+        public ComingSoonMediaType MediaType { get; set; }
         public string FolderPath { get; set; }
         public string ItemName { get; set; }
         public int Year { get; set; }

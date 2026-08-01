@@ -24,6 +24,7 @@ namespace ManageComingSoon
     using MediaBrowser.Model.Logging;
     using ManageComingSoon.Storage;   // Added
     using ManageComingSoon.Services;  // Added
+    using ManageComingSoon.Model;
     using MediaBrowser.Common; // Added for IApplicationHost
 
     public class ComingSoonEntryPoint : IServerEntryPoint
@@ -49,8 +50,8 @@ namespace ManageComingSoon
 
         // Paths registered by AddComingSoonAsync, consumed by ItemAdded handler.
         // Static so EmbyLibraryService can register without a reference to this instance.
-        private static readonly HashSet<string> PendingPaths =
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, ComingSoonMediaType> PendingPaths =
+            new Dictionary<string, ComingSoonMediaType>(StringComparer.OrdinalIgnoreCase);
         private static readonly object PendingLock = new object();
 
         public ComingSoonEntryPoint(
@@ -122,10 +123,11 @@ namespace ManageComingSoon
         // 
         // -----------------------------------------------------------------------
 
-        public static void RegisterPendingPath(string folderPath)
+        public static void RegisterPendingPath(
+            string folderPath, ComingSoonMediaType mediaType = ComingSoonMediaType.Movie)
         {
             lock (PendingLock)
-                PendingPaths.Add(folderPath);
+                PendingPaths[folderPath] = mediaType;
         }
 
         // -----------------------------------------------------------------------
@@ -140,8 +142,10 @@ namespace ManageComingSoon
                 if (item == null || string.IsNullOrEmpty(item.Path))
                     return;
 
-                // Only process movies
-                if (!(item is MediaBrowser.Controller.Entities.Movies.Movie))
+                bool isMovie = item is MediaBrowser.Controller.Entities.Movies.Movie;
+                bool isEpisode = string.Equals(item.GetType().Name, "Episode", StringComparison.Ordinal);
+                bool isSeries = string.Equals(item.GetType().Name, "Series", StringComparison.Ordinal);
+                if (!isMovie && !isEpisode && !isSeries)
                     return;
 
                 // ---------------------------------------------------------------
@@ -163,13 +167,15 @@ namespace ManageComingSoon
                 // Check 2: Is this a new Coming Soon placeholder to tag?
                 // ---------------------------------------------------------------
                 string matchedPath = null;
+                ComingSoonMediaType matchedMediaType = ComingSoonMediaType.Movie;
                 lock (PendingLock)
                 {
                     foreach (var pending in PendingPaths)
                     {
-                        if (item.Path.StartsWith(pending, StringComparison.OrdinalIgnoreCase))
+                        if (item.Path.StartsWith(pending.Key, StringComparison.OrdinalIgnoreCase))
                         {
-                            matchedPath = pending;
+                            matchedPath = pending.Key;
+                            matchedMediaType = pending.Value;
                             break;
                         }
                     }
@@ -178,18 +184,27 @@ namespace ManageComingSoon
                 if (matchedPath == null)
                     return;
 
+                BaseItem tagTarget = item;
+                if (matchedMediaType == ComingSoonMediaType.TvShow)
+                {
+                    while (tagTarget != null &&
+                        !string.Equals(tagTarget.GetType().Name, "Series", StringComparison.Ordinal))
+                        tagTarget = tagTarget.GetParent();
+                    if (tagTarget == null) return;
+                }
+
                 this.logger.Info(
                     "ManageComingSoon: ItemAdded fired for '{0}' (path={1}) – applying Coming Soon tag",
-                    item.Name, item.Path);
+                    tagTarget.Name, tagTarget.Path);
 
                 // Apply tag using the pattern confirmed working by community:
                 // item.Tags = array + UpdateItem(item, parent, type, null)
                 string comingSoonTag = ActiveTagText;
-                var tags = item.Tags != null ? new List<string>(item.Tags) : new List<string>();
+                var tags = tagTarget.Tags != null ? new List<string>(tagTarget.Tags) : new List<string>();
                 if (tags.FindIndex(t => string.Equals(t, comingSoonTag, StringComparison.OrdinalIgnoreCase)) < 0)
                 {
                     tags.Add(comingSoonTag);
-                    item.Tags = tags.ToArray();
+                    tagTarget.Tags = tags.ToArray();
 
                     // Lock Tags so a later metadata refresh — ours, a scheduled
                     // library scan, or a manual "Refresh Metadata" click in Emby's
@@ -199,22 +214,22 @@ namespace ManageComingSoon
                     // treat it as a "subtitle track change" and re-run identity
                     // providers (FFProbe/MovieDb/Tvdb) against the item; without
                     // this lock, that provider re-run resets Tags to empty.
-                    if (!item.LockedFields.Contains(MediaBrowser.Model.Entities.MetadataFields.Tags))
+                    if (!tagTarget.LockedFields.Contains(MediaBrowser.Model.Entities.MetadataFields.Tags))
                     {
-                        item.LockedFields = item.LockedFields
+                        tagTarget.LockedFields = tagTarget.LockedFields
                             .Concat(new[] { MediaBrowser.Model.Entities.MetadataFields.Tags })
                             .ToArray();
                     }
 
                     this.libraryManager.UpdateItem(
-                        item,
-                        item.GetParent(),
+                        tagTarget,
+                        tagTarget.GetParent(),
                         ItemUpdateType.MetadataEdit,
                         null);
 
                     this.logger.Info(
                         "ManageComingSoon: Tag '{0}' applied to '{1}' (Tags field locked to protect it from provider refresh)",
-                        comingSoonTag, item.Name);
+                        comingSoonTag, tagTarget.Name);
                 }
 
                 // ---------------------------------------------------------------
@@ -225,8 +240,9 @@ namespace ManageComingSoon
                 // pipeline and applies SetAdded itself, whichever wins. This is
                 // independent of the tag application above — both always run.
                 // ---------------------------------------------------------------
-                var addEntry = ManageComingSoon.Services.AddMovieTracker
-                    .FindAddingByFolderPath(matchedPath);
+                var addEntry = matchedMediaType == ComingSoonMediaType.Movie
+                    ? ManageComingSoon.Services.AddMovieTracker.FindAddingByFolderPath(matchedPath)
+                    : null;
 
                 if (addEntry != null)
                 {

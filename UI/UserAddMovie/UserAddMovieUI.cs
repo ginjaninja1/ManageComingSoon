@@ -1,13 +1,18 @@
 ﻿namespace ManageComingSoon.UI.UserAddMovie
 {
+    using System.Collections.Generic;
     using System.ComponentModel;
     using Emby.Web.GenericEdit;
+    using Emby.Web.GenericEdit.Common;
     using Emby.Web.GenericEdit.Elements;
     using Emby.Web.GenericEdit.Elements.List;
+    using MediaBrowser.Model.Attributes;
+    using MediaBrowser.Model.Plugins;
+    using MediaBrowser.Model.LocalizationAttributes;
 
     public sealed class UserAddMovieUI : EditableOptionsBase
     {
-        public override string EditorTitle => "Add Coming Soon Movies";
+        public override string EditorTitle => "Add Coming Soon Titles";
 
         public override string EditorDescription =>
             "Enter one movie and its year or \n[Advanced Usage] Multiple movies in one go via a ;,| split eg. Dune Part Two;2024|Gladiator II\n" +
@@ -16,7 +21,15 @@
             "Click 'Add to Library'.\n" +
             "A placeholder will be added to the 'coming soon' library [optionally with its trailer], pending addition to Emby when the bluray is released.";
 
-        [DisplayName("Movie name")]
+        [Browsable(false)]
+        public IEnumerable<EditorSelectOption> MediaTypeOptions { get; set; } =
+            new[] { new EditorSelectOption("Movie", "Movie"), new EditorSelectOption("TvShow", "TV Show") };
+
+        [DisplayName("Content Type")]
+        [SelectItemsSource(nameof(MediaTypeOptions))]
+        public string MediaType { get; set; } = "Movie";
+
+        [DisplayName("Title")]
         [Description("or Movie1;Year|Movie2|Movie3;Year...")]
         public string MovieName { get; set; } = string.Empty;
 

@@ -98,6 +98,7 @@ namespace ManageComingSoon.Services
                     for (int k = i; k < items.Length; k++)
                         MakeLiveTracker.EnqueueTask(
                             items[k].FolderPath, items[k].ItemName, items[k].Year,
+                            items[k].MediaType,
                             items[k].TargetPath, items[k].DeleteStub, items[k].Mode,
                             items[k].CustomStubPath);
                     break;
@@ -111,7 +112,7 @@ namespace ManageComingSoon.Services
                 this.Logger.Info("ManageComingSoon: MakeLiveTask processing {0} '{1}'",
                     batchTag ?? "[1/1]", item.ItemName);
 
-                MakeLiveTracker.Register(item.FolderPath, item.ItemName, item.Year);
+                MakeLiveTracker.Register(item.FolderPath, item.ItemName, item.Year, item.MediaType);
 
                 if (!MakeLiveTracker.IsInFlight(item.FolderPath))
                 {
@@ -138,6 +139,7 @@ namespace ManageComingSoon.Services
 
                     var result = await this.LibraryService.MakeLivePipelineAsync(
                         item.FolderPath,
+                        item.MediaType,
                         item.TargetPath,
                         item.DeleteStub,
                         maxStubFileSizeMb,

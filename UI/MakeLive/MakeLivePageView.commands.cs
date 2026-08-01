@@ -24,6 +24,7 @@
 
 namespace ManageComingSoon.UI.MakeLive
 {
+    using ManageComingSoon.Model;
     using System;
     using System.Collections.Generic;
     using System.IO;
@@ -43,6 +44,14 @@ namespace ManageComingSoon.UI.MakeLive
 
     internal partial class MakeLivePageView : PluginPageView, IDisposable
     {
+        private string GetMakeLiveTargetPath(ComingSoonMediaType mediaType)
+        {
+            if (!this.plugin.Configuration.MakeLiveMoveToNewLocation) return null;
+            return ConfigurationPageView.PathFromKey(
+                mediaType == ComingSoonMediaType.TvShow
+                    ? this.plugin.Configuration.TvMakeLiveTargetKey
+                    : this.plugin.Configuration.MovieMakeLiveTargetKey);
+        }
         // -----------------------------------------------------------------------
         // Commands
         // -----------------------------------------------------------------------
@@ -218,16 +227,17 @@ namespace ManageComingSoon.UI.MakeLive
             try
             {
                 var cfg = this.plugin.Configuration;
-                string targetPath = cfg.MakeLiveMoveToNewLocation
-                    ? ConfigurationPageView.PathFromKey(cfg.MakeLiveTargetKey)
-                    : null;
-
                 var items = this.libraryService.GetComingSoonItems();
 
                 foreach (var item in items)
                 {
+                    var mediaType = string.Equals(item.GetType().Name, "Series", StringComparison.Ordinal)
+                        ? ComingSoonMediaType.TvShow : ComingSoonMediaType.Movie;
+                    string targetPath = GetMakeLiveTargetPath(mediaType);
                     string filePath = item.Path ?? string.Empty;
-                    string folderPath = !string.IsNullOrEmpty(filePath)
+                    string folderPath = mediaType == ComingSoonMediaType.TvShow
+                        ? filePath
+                        : !string.IsNullOrEmpty(filePath)
                         ? Path.GetDirectoryName(filePath) ?? filePath
                         : string.Empty;
                     if (string.IsNullOrEmpty(folderPath)) continue;
@@ -236,6 +246,7 @@ namespace ManageComingSoon.UI.MakeLive
                         folderPath,
                         item.Name,
                         item.ProductionYear ?? 0,
+                        mediaType,
                         AnalyseOne(folderPath, targetPath));
                 }
 
@@ -264,14 +275,27 @@ namespace ManageComingSoon.UI.MakeLive
         private MigrationAnalysisResult AnalyseOne(string folderPath)
         {
             var cfg = this.plugin.Configuration;
-            string targetPath = cfg.MakeLiveMoveToNewLocation
-                ? ConfigurationPageView.PathFromKey(cfg.MakeLiveTargetKey)
-                : null;
+            var entry = MakeLiveTracker.GetPending(folderPath);
+            string targetPath = GetMakeLiveTargetPath(
+                entry != null ? entry.MediaType : ComingSoonMediaType.Movie);
             return AnalyseOne(folderPath, targetPath);
         }
 
         private MigrationAnalysisResult AnalyseOne(string folderPath, string targetPath)
         {
+            if (this.plugin.Configuration.MakeLiveMoveToNewLocation &&
+                string.IsNullOrEmpty(targetPath))
+            {
+                return new MigrationAnalysisResult
+                {
+                    SourceDirectory = folderPath,
+                    DestinationDirectory = "(not configured)",
+                    IsSafeToProceed = false,
+                    Warnings = new List<string> { "The Make Live destination for this content type is not configured." },
+                    WorstCaseScenarioText = "Operation blocked. No files will be altered."
+                };
+            }
+
             if (!string.IsNullOrEmpty(targetPath))
                 return this.analyzer.Analyze(folderPath, targetPath);
 
@@ -292,9 +316,6 @@ namespace ManageComingSoon.UI.MakeLive
             if (folderPaths == null || folderPaths.Length == 0) return;
 
             var cfg = this.plugin.Configuration;
-            string targetPath = cfg.MakeLiveMoveToNewLocation
-                ? ConfigurationPageView.PathFromKey(cfg.MakeLiveTargetKey)
-                : null;
             string customStubPath = null;
 
             var goodPaths = new List<string>();
@@ -302,6 +323,9 @@ namespace ManageComingSoon.UI.MakeLive
 
             foreach (var folderPath in folderPaths)
             {
+                var entry = MakeLiveTracker.GetPending(folderPath);
+                string targetPath = GetMakeLiveTargetPath(
+                    entry != null ? entry.MediaType : ComingSoonMediaType.Movie);
                 var fresh = AnalyseOne(folderPath, targetPath);
                 MakeLiveTracker.SetPendingAnalysis(folderPath, fresh);
 
@@ -330,6 +354,8 @@ namespace ManageComingSoon.UI.MakeLive
             foreach (var folderPath in goodPaths)
             {
                 var entry = MakeLiveTracker.GetPending(folderPath);
+                string targetPath = GetMakeLiveTargetPath(
+                    entry != null ? entry.MediaType : ComingSoonMediaType.Movie);
 
                 // Transition to Queued before EnqueueTask so the UI immediately
                 // shows "waiting" rows even before MakeLiveTask calls Register().
@@ -341,6 +367,7 @@ namespace ManageComingSoon.UI.MakeLive
                     folderPath,
                     entry != null ? entry.ItemName : Path.GetFileName(folderPath),
                     entry != null ? entry.Year : 0,
+                    entry != null ? entry.MediaType : ComingSoonMediaType.Movie,
                     targetPath,
                     cfg.MakeLiveDeleteStubFile,
                     LiveMakeLiveMode,

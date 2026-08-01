@@ -13,6 +13,7 @@ namespace ManageComingSoon.UI.AddMovie
     using System.Threading.Tasks;
     using Emby.Web.GenericEdit.Elements;
     using Emby.Web.GenericEdit.Elements.List;
+    using ManageComingSoon.Model;
     using ManageComingSoon.Services;
     using ManageComingSoon.UI.Configuration;
     using ManageComingSoon.UIBaseClasses.Views;
@@ -23,12 +24,26 @@ namespace ManageComingSoon.UI.AddMovie
 
     internal partial class AddMoviePageView : PluginPageView, IDisposable
     {
+        private ComingSoonMediaType SelectedMediaType
+            => string.Equals(UI.MediaType, "TvShow", StringComparison.OrdinalIgnoreCase)
+                ? ComingSoonMediaType.TvShow
+                : ComingSoonMediaType.Movie;
+
+        private string GetComingSoonTargetKey(ComingSoonMediaType mediaType)
+            => mediaType == ComingSoonMediaType.TvShow
+                ? this.plugin.Configuration.TvComingSoonTargetKey
+                : this.plugin.Configuration.MovieComingSoonTargetKey;
+
         // -----------------------------------------------------------------------
         // Commands
         // -----------------------------------------------------------------------
 
         public override Task<IPluginUIView> RunCommand(string itemId, string commandId, string data)
         {
+            if (string.Equals(UI.MediaType, "TvShow", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(UI.MediaType, "Movie", StringComparison.OrdinalIgnoreCase))
+                selectedMediaTypeValue = UI.MediaType;
+
             if (commandId == "AddToList")
             {
                 HandleAddToList();
@@ -179,7 +194,7 @@ namespace ManageComingSoon.UI.AddMovie
             if (string.IsNullOrWhiteSpace(this.plugin.Configuration.TmdbApiKey))
             {
                 SetOverallStatus(
-                    "TMDB API key not configured. Please add one on the Configuration tab before adding movies.",
+                    "TMDB API key not configured. Please add one on the Configuration tab before adding titles.",
                     ItemStatus.Failed);
                 RequestUiRefresh(preserveStatus: true);
                 return;
@@ -217,7 +232,7 @@ namespace ManageComingSoon.UI.AddMovie
 
             var addedEntries = new List<AddMovieEntry>(entries.Count);
             foreach (var item in entries)
-                addedEntries.Add(AddMovieTracker.Add(item.Name, item.Year));
+                addedEntries.Add(AddMovieTracker.Add(item.Name, item.Year, SelectedMediaType));
 
             RequestUiRefresh();
 
@@ -266,7 +281,7 @@ namespace ManageComingSoon.UI.AddMovie
 
             foreach (var item in entries)
             {
-                var entry = AddMovieTracker.AddManual(item.Name, item.Year);
+                var entry = AddMovieTracker.AddManual(item.Name, item.Year, SelectedMediaType);
                 CheckDestinationForEntry(entry.Id);
             }
 
@@ -284,9 +299,6 @@ namespace ManageComingSoon.UI.AddMovie
                 .Where(e => e.State == AddMovieState.Confident))
                 CheckDestinationForEntry(e.Id);
 
-            string targetPath = ConfigurationPageView.PathFromKey(
-                this.plugin.Configuration.ComingSoonTargetKey);
-
             // Transition all currently-selected Confident entries into the queue
             // and record their destination path immediately so queued rows can
             // display it without waiting for the task to start.
@@ -296,6 +308,8 @@ namespace ManageComingSoon.UI.AddMovie
 
             foreach (var e in toQueue)
             {
+                string targetPath = ConfigurationPageView.PathFromKey(
+                    GetComingSoonTargetKey(e.MediaType));
                 AddMovieTracker.SetQueued(e.Id);
                 if (!string.IsNullOrEmpty(targetPath))
                 {
@@ -351,7 +365,7 @@ namespace ManageComingSoon.UI.AddMovie
             }
 
             string targetPath = ConfigurationPageView.PathFromKey(
-                this.plugin.Configuration.ComingSoonTargetKey);
+                GetComingSoonTargetKey(entry.MediaType));
 
             if (string.IsNullOrEmpty(targetPath))
             {
@@ -515,6 +529,7 @@ namespace ManageComingSoon.UI.AddMovie
             var chosen = entry.Candidates[index];
             var match = new ManageComingSoon.Model.TmdbMovieResult
             {
+                MediaType = entry.MediaType,
                 Id = chosen.TmdbId,
                 Title = chosen.Title,
                 Overview = chosen.Overview,
@@ -580,7 +595,7 @@ namespace ManageComingSoon.UI.AddMovie
             try
             {
                 var cast = await this.tmdbService
-                    .GetCastAsync(cfg.TmdbApiKey, candidate.TmdbId, this.cts.Token)
+                    .GetCastAsync(cfg.TmdbApiKey, candidate.TmdbId, candidate.MediaType, this.cts.Token)
                     .ConfigureAwait(false);
 
                 if (this.cts.IsCancellationRequested) return;
@@ -603,6 +618,8 @@ namespace ManageComingSoon.UI.AddMovie
         private async Task RunSearchAsync(string id, string name, int? year)
         {
             if (this.cts.IsCancellationRequested) return;
+            var entry = AddMovieTracker.Get(id);
+            if (entry == null) return;
             var cfg = this.plugin.Configuration;
 
             if (string.IsNullOrWhiteSpace(cfg.TmdbApiKey))
@@ -619,7 +636,7 @@ namespace ManageComingSoon.UI.AddMovie
                     name, year.HasValue ? year.Value.ToString() : "none");
 
                 var results = await this.tmdbService
-                    .SearchAsync(cfg.TmdbApiKey, name, year, this.cts.Token)
+                    .SearchAsync(cfg.TmdbApiKey, name, year, entry.MediaType, this.cts.Token)
                     .ConfigureAwait(false);
 
                 if (this.cts.IsCancellationRequested) return;

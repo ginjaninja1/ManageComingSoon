@@ -6,22 +6,35 @@
 
 namespace ManageComingSoon.UI.AddMovie
 {
+    using System.Collections.Generic;
     using System.ComponentModel;
     using Emby.Web.GenericEdit;
+    using Emby.Web.GenericEdit.Common;
     using Emby.Web.GenericEdit.Elements;
     using Emby.Web.GenericEdit.Elements.List;
+    using MediaBrowser.Model.Attributes;
+    using MediaBrowser.Model.Plugins;
+    using MediaBrowser.Model.LocalizationAttributes;
 
     public class AddMovieUI : EditableOptionsBase
     {
-        public override string EditorTitle => "Add Coming Soon Movies";
+        public override string EditorTitle => "Add Coming Soon Titles";
         public override string EditorDescription =>
-            "Enter a movie name and optional year, then click Add. " +
+            "Choose Movie or TV Show, enter a title and optional year, then click Add. " +
             "Each entry is searched against TMDB automatically. " +
             "To add several at once, separate them with | and optionally append " +
             ";Year to any of them, e.g. Dune Part Two;2024|Gladiator II|The Batman;2022.";
 
         // ---- Search inputs (tight block, no caption) ------------------------
-        [DisplayName("Movie Name")]
+        [Browsable(false)]
+        public IEnumerable<EditorSelectOption> MediaTypeOptions { get; set; } =
+            new[] { new EditorSelectOption("Movie", "Movie"), new EditorSelectOption("TvShow", "TV Show") };
+
+        [DisplayName("Content Type")]
+        [SelectItemsSource(nameof(MediaTypeOptions))]
+        public string MediaType { get; set; } = "Movie";
+
+        [DisplayName("Title")]
         [Description("or Movie1;Year|Movie2|Movie3;Year...)")]
         public string MovieName { get; set; } = string.Empty;
 

@@ -179,6 +179,7 @@ namespace ManageComingSoon.Services
         // -----------------------------------------------------------------------
         public async Task<AddComingSoonResult> AddComingSoonPipelineAsync(
             TmdbMovieResult movie,
+            ComingSoonMediaType mediaType,
             string targetPath,
             string customStubPath,
             string apiKey,
@@ -188,6 +189,10 @@ namespace ManageComingSoon.Services
         {
             string safeName = BuildComingSoonFolderName(movie.Title, movie.ReleaseYear);
             string folderPath = Path.Combine(targetPath, safeName);
+            string stubName = mediaType == ComingSoonMediaType.TvShow
+                ? safeName + " - S01E01" + GetStubExtension(customStubPath)
+                : safeName + GetStubExtension(customStubPath);
+            string stubFile = Path.Combine(folderPath, stubName);
 
             this.logger.Info("[AddPipeline] ===== START ===== folder={0}", folderPath);
 
@@ -201,7 +206,6 @@ namespace ManageComingSoon.Services
                 try
                 {
                     this.fileSystem.CreateDirectory(folderPath);
-                    string stubFile = Path.Combine(folderPath, safeName + GetStubExtension(customStubPath));
                     await WriteStubAsync(stubFile, customStubPath).ConfigureAwait(false);
                     this.logger.Info("[AddPipeline] Folder and stub created: {0}", folderPath);
                 }
@@ -214,7 +218,7 @@ namespace ManageComingSoon.Services
 
                 // Still required: the only mechanism that makes
                 // ComingSoonEntryPoint.OnItemAdded apply the Coming Soon tag.
-                ComingSoonEntryPoint.RegisterPendingPath(folderPath);
+                ComingSoonEntryPoint.RegisterPendingPath(folderPath, mediaType);
                 this.logger.Info("[AddPipeline] Registered pending path for tagging: {0}", folderPath);
 
                 ReportAdd(progress, AddComingSoonStage.WriteFiles);
@@ -262,18 +266,53 @@ namespace ManageComingSoon.Services
                 bool confirmed = await WaitForConditionAsync(
                     () =>
                     {
-                        taggedMovie = FindMovieInFolder(folderPath);
+                        taggedMovie = FindComingSoonItemInFolder(folderPath, mediaType);
                         return taggedMovie != null;
                     },
                     token, "AddPipeline/ConfirmIngestedAndTagged",
                     AddPipelineIngestPassSeconds,
-                    onStatus).ConfigureAwait(false);
+                    onStatus, null,
+                    mediaType == ComingSoonMediaType.TvShow
+                        ? "TV Show ingestion"
+                        : "Movie ingestion").ConfigureAwait(false);
 
                 if (!confirmed)
                     return FailAdd(AddComingSoonStage.ConfirmIngestedAndTagged,
                         "Item was not ingested and tagged within the timeout.", folderPath);
 
-                LogItemState("AddPipeline - confirmed ingested and tagged", "Movie", taggedMovie);
+                if (mediaType == ComingSoonMediaType.TvShow)
+                {
+                    BaseItem episode = null;
+                    bool episodeConfirmed = await WaitForConditionAsync(
+                        () =>
+                        {
+                            episode = FindEpisodeByPath(stubFile);
+                            return episode != null;
+                        },
+                        token, "AddPipeline/ConfirmEpisode",
+                        AddPipelineIngestPassSeconds,
+                        onStatus, null, "TV Episode ingestion").ConfigureAwait(false);
+
+                    if (!episodeConfirmed)
+                        return FailAdd(AddComingSoonStage.ConfirmIngestedAndTagged,
+                            "Series was added, but S01E01 was not ingested within the timeout.", folderPath);
+
+                    LogItemState("AddPipeline - confirmed playable episode", "Episode", episode);
+
+                    // The folder-path lookup above resolved the actual Series
+                    // media item. Refresh that Series ID directly for provider
+                    // identification and artwork; the CollectionFolder ID is
+                    // only the filesystem-discovery target.
+                    onStatus?.Invoke("Refreshing TV Show metadata and artwork…");
+                    await CallRefreshEndpointAsync(
+                        http.Value.Client, http.Value.BaseUrl,
+                        taggedMovie.InternalId, "Series (metadata and artwork)",
+                        apiKey, MetadataRefreshMode.FullRefresh,
+                        "AddPipeline/RefreshSeriesMetadata", token).ConfigureAwait(false);
+
+                }
+
+                LogItemState("AddPipeline - confirmed ingested and tagged", mediaType.DisplayName(), taggedMovie);
                 ReportAdd(progress, AddComingSoonStage.ConfirmIngestedAndTagged);
 
                 this.logger.Info("[AddPipeline] ===== COMPLETE ===== '{0}'", movie.Title);

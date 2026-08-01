@@ -55,6 +55,10 @@ namespace ManageComingSoon.UI.AddMovie
 
     internal partial class AddMoviePageView : PluginPageView, IDisposable
     {
+        // All live page instances receive tracker broadcasts. Keep the tab's
+        // most recently submitted selector value shared so an older instance
+        // cannot broadcast its default "Movie" value over the active page.
+        private static string selectedMediaTypeValue = "Movie";
         private const int MaxDefaultCandidates = 3;
         private const int MaxExpandedCandidates = 10;
         private const int UiRefreshCoalesceMs = 100;
@@ -115,6 +119,7 @@ namespace ManageComingSoon.UI.AddMovie
             this.logger = logger;
 
             this.ContentData = new AddMovieUI();
+            UI.MediaType = selectedMediaTypeValue;
             this.ShowSave = false;
 
             this.taskManager.TaskExecuting += OnTaskExecuting;
@@ -219,6 +224,8 @@ namespace ManageComingSoon.UI.AddMovie
             lock (this.rebuildLock)
             {
                 if (this.disposed) return;
+                UI.MediaType = selectedMediaTypeValue;
+                RefreshAddButtonState();
                 RebuildMovieList();
                 if (!preserveStatus)
                     UpdateOverallStatus();

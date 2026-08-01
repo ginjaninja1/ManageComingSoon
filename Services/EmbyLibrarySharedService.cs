@@ -88,7 +88,7 @@ namespace ManageComingSoon.Services
             var query = new InternalItemsQuery
             {
                 Tags = new[] { ActiveTagText },
-                IncludeItemTypes = new[] { "Movie" },
+                IncludeItemTypes = new[] { "Movie", "Series" },
                 Recursive = true,
             };
             return this.libraryManager.GetItemList(query);
@@ -121,13 +121,13 @@ namespace ManageComingSoon.Services
         /// Returns Kind = None for tmdbId &lt;= 0 (manual/no-match entries never
         /// carry a real TMDB id) or if the query itself throws.
         /// </summary>
-        public TmdbConflictResult CheckTmdbLibraryConflict(int tmdbId)
+        public TmdbConflictResult CheckTmdbLibraryConflict(int tmdbId, ComingSoonMediaType mediaType)
         {
             if (tmdbId <= 0) return new TmdbConflictResult();
 
             var query = new InternalItemsQuery
             {
-                IncludeItemTypes = new[] { "Movie" },
+                IncludeItemTypes = new[] { mediaType == ComingSoonMediaType.TvShow ? "Series" : "Movie" },
                 Recursive = true,
                 AnyProviderIdEquals = new List<KeyValuePair<string, string>>
                 {
@@ -162,8 +162,8 @@ namespace ManageComingSoon.Services
                     ? TmdbConflictKind.AlreadyComingSoon
                     : TmdbConflictKind.AlreadyAvailable,
                 Reason = alreadyComingSoon
-                    ? "Movie already coming soon"
-                    : "Movie already available"
+                    ? mediaType.DisplayName() + " already coming soon"
+                    : mediaType.DisplayName() + " already available"
             };
         }
 
@@ -199,6 +199,55 @@ namespace ManageComingSoon.Services
             }
 
             return null;
+        }
+
+        protected BaseItem FindComingSoonItemInFolder(
+            string folderPath, ComingSoonMediaType mediaType)
+        {
+            if (mediaType == ComingSoonMediaType.Movie)
+                return FindMovieInFolder(folderPath);
+
+            var query = new InternalItemsQuery
+            {
+                Tags = new[] { ActiveTagText },
+                IncludeItemTypes = new[] { "Series" },
+                Recursive = true,
+            };
+
+            return this.libraryManager.GetItemList(query).FirstOrDefault(candidate =>
+                !string.IsNullOrEmpty(candidate.Path) &&
+                string.Equals(candidate.Path.TrimEnd(System.IO.Path.DirectorySeparatorChar),
+                    folderPath.TrimEnd(System.IO.Path.DirectorySeparatorChar),
+                    StringComparison.OrdinalIgnoreCase));
+        }
+
+        protected BaseItem FindSeriesByFolder(string folderPath, bool requireComingSoonTag)
+        {
+            var query = new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { "Series" },
+                Recursive = true,
+            };
+            if (requireComingSoonTag) query.Tags = new[] { ActiveTagText };
+
+            return this.libraryManager.GetItemList(query).FirstOrDefault(candidate =>
+                !string.IsNullOrEmpty(candidate.Path) &&
+                string.Equals(candidate.Path.TrimEnd(System.IO.Path.DirectorySeparatorChar),
+                    folderPath.TrimEnd(System.IO.Path.DirectorySeparatorChar),
+                    StringComparison.OrdinalIgnoreCase));
+        }
+
+        protected BaseItem FindEpisodeByPath(string episodePath)
+        {
+            if (string.IsNullOrEmpty(episodePath)) return null;
+            var query = new InternalItemsQuery
+            {
+                Path = episodePath,
+                IncludeItemTypes = new[] { "Episode" },
+                Recursive = true,
+            };
+            return this.libraryManager.GetItemList(query).FirstOrDefault(candidate =>
+                string.Equals(candidate.Path, episodePath, StringComparison.OrdinalIgnoreCase));
         }
 
         // -----------------------------------------------------------------------
@@ -372,12 +421,13 @@ namespace ManageComingSoon.Services
         protected Task<bool> WaitForConditionAsync(
             Func<bool> probe, CancellationToken token, string stageLabel,
             int firstWaitSeconds, int secondWaitSeconds,
-            Action<string> onPass = null, string logContext = null)
+            Action<string> onPass = null, string logContext = null,
+            string conditionLabel = "Movie Ingestion")
         {
             return WaitForConditionAsync(
                 probe, token, stageLabel,
                 new[] { firstWaitSeconds, secondWaitSeconds },
-                onPass, logContext);
+                onPass, logContext, conditionLabel);
         }
 
         /// <summary>
@@ -388,6 +438,14 @@ namespace ManageComingSoon.Services
         protected async Task<bool> WaitForConditionAsync(
             Func<bool> probe, CancellationToken token, string stageLabel,
             int[] passSeconds, Action<string> onPass = null, string logContext = null)
+            => await WaitForConditionAsync(
+                probe, token, stageLabel, passSeconds, onPass, logContext,
+                "Movie Ingestion").ConfigureAwait(false);
+
+        protected async Task<bool> WaitForConditionAsync(
+            Func<bool> probe, CancellationToken token, string stageLabel,
+            int[] passSeconds, Action<string> onPass, string logContext,
+            string conditionLabel)
         {
             string ctxTag = string.IsNullOrEmpty(logContext) ? string.Empty : logContext;
             string timings = string.Join("/", passSeconds.Select(s => s + "s"));
@@ -400,7 +458,8 @@ namespace ManageComingSoon.Services
 
                 if (onPass != null)
                     onPass(string.Format(
-                        "Checking for Movie Ingestion — {0} Pass ({1}s)...", ordinal, waitSeconds));
+                        "Checking for {0} — {1} Pass ({2}s)...",
+                        conditionLabel, ordinal, waitSeconds));
 
                 await Task.Delay(TimeSpan.FromSeconds(waitSeconds), token).ConfigureAwait(false);
                 elapsed += waitSeconds;

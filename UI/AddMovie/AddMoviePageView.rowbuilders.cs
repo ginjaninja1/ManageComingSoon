@@ -111,6 +111,7 @@ namespace ManageComingSoon.UI.AddMovie
             string titleYear = entry.DisplayYear > 0
                 ? string.Format("{0} ({1})", entry.DisplayTitle, entry.DisplayYear)
                 : entry.DisplayTitle;
+            titleYear = string.Format("[{0}] {1}", entry.MediaType.DisplayName(), titleYear);
 
             // Queued rows show the destination parent path as a visual confirmation
             // that the correct target folder has been resolved.

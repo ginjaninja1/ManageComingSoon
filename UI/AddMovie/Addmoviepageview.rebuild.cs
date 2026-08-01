@@ -41,12 +41,22 @@ namespace ManageComingSoon.UI.AddMovie
         private void RefreshAddButtonState()
         {
             bool hasKey = !string.IsNullOrWhiteSpace(this.plugin.Configuration.TmdbApiKey);
-            UI.AddToListButton.Caption = hasKey
+            UI.AddToListButton = new ButtonItem(hasKey
                 ? "Add via Provider Match"
-                : "Register for and add a TMDB API key first";
-            UI.AddToListButton.IsEnabled = hasKey;
-            UI.AddManualButton.Caption = "Add Manual";
-            UI.AddManualButton.IsEnabled = true;
+                : "Register for and add a TMDB API key first")
+            {
+                StandardIcon = StandardIcons.Add,
+                Data1 = "AddToList",
+                CommandId = "AddToList",
+                IsEnabled = hasKey,
+            };
+            UI.AddManualButton = new ButtonItem("Add Manual")
+            {
+                StandardIcon = StandardIcons.Add,
+                Data1 = "AddManual",
+                CommandId = "AddManual",
+                IsEnabled = true,
+            };
         }
 
         // -----------------------------------------------------------------------

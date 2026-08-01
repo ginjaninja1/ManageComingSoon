@@ -52,7 +52,7 @@ namespace ManageComingSoon
         public override Guid Id => PluginId;
         public override string Name => "Manage Coming Soon";
         public override string Description =>
-            "Search TMDB for upcoming movies, add Coming Soon placeholders to your library, " +
+            "Search TMDB for upcoming movies and TV shows, add Coming Soon placeholders, " +
             "and manage their transition to live status.";
 
         public ImageFormat ThumbImageFormat => ImageFormat.Png;
@@ -90,8 +90,10 @@ namespace ManageComingSoon
                             this.addServiceInstance,
                             this.logger,
                             () => this.Configuration.EmbyApiKey,
-                            () => ConfigurationPageView.PathFromKey(
-                                      this.Configuration.ComingSoonTargetKey),
+                            mediaType => ConfigurationPageView.PathFromKey(
+                                mediaType == ComingSoonMediaType.TvShow
+                                    ? this.Configuration.TvComingSoonTargetKey
+                                    : this.Configuration.MovieComingSoonTargetKey),
                             () => string.IsNullOrEmpty(this.Configuration.ComingSoonStubVideoPath)
                                       ? null
                                       : this.Configuration.ComingSoonStubVideoPath);

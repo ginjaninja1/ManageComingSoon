@@ -40,18 +40,19 @@ namespace ManageComingSoon.Services
             string apiKey,
             string movieName,
             int? year,
+            ComingSoonMediaType mediaType,
             CancellationToken token = default(CancellationToken))
         {
             var results = new List<TmdbMovieResult>();
 
             // Primary search (with year if supplied)
-            var primary = await SearchMovieAsync(apiKey, movieName, year, token).ConfigureAwait(false);
+            var primary = await SearchTitleAsync(apiKey, movieName, year, mediaType, token).ConfigureAwait(false);
             MergeInto(results, primary);
 
             // Also search without year so ±1 candidates aren't missed
             if (year.HasValue)
             {
-                var noYear = await SearchMovieAsync(apiKey, movieName, null, token).ConfigureAwait(false);
+                var noYear = await SearchTitleAsync(apiKey, movieName, null, mediaType, token).ConfigureAwait(false);
                 MergeInto(results, noYear);
             }
 
@@ -59,7 +60,7 @@ namespace ManageComingSoon.Services
             var altBoostIds = new HashSet<int>();
             foreach (var r in results.ToList())
             {
-                var alts = await GetAltTitlesAsync(apiKey, r.Id, token).ConfigureAwait(false);
+                var alts = await GetAltTitlesAsync(apiKey, r.Id, mediaType, token).ConfigureAwait(false);
                 if (alts.Any(a => string.Equals(a, movieName, StringComparison.OrdinalIgnoreCase)))
                     altBoostIds.Add(r.Id);
             }
@@ -164,11 +165,11 @@ namespace ManageComingSoon.Services
         /// Returns an empty list on any failure — never throws.
         /// </summary>
         public async Task<List<string>> GetCastAsync(
-            string apiKey, int tmdbId,
+            string apiKey, int tmdbId, ComingSoonMediaType mediaType,
             CancellationToken token = default(CancellationToken))
         {
-            string url = string.Format("{0}/movie/{1}/credits?api_key={2}",
-                BaseUrl, tmdbId, Uri.EscapeDataString(apiKey));
+            string url = string.Format("{0}/{1}/{2}/credits?api_key={3}",
+                BaseUrl, mediaType.TmdbPathSegment(), tmdbId, Uri.EscapeDataString(apiKey));
 
             string raw = await FetchStringAsync(url, token).ConfigureAwait(false);
             if (string.IsNullOrEmpty(raw)) return new List<string>();
@@ -196,17 +197,18 @@ namespace ManageComingSoon.Services
         // Private: HTTP fetch helpers
         // -----------------------------------------------------------------------
 
-        private async Task<List<TmdbMovieResult>> SearchMovieAsync(
-            string apiKey, string query, int? year, CancellationToken token)
+        private async Task<List<TmdbMovieResult>> SearchTitleAsync(
+            string apiKey, string query, int? year, ComingSoonMediaType mediaType, CancellationToken token)
         {
             string url = string.Format(
-                "{0}/search/movie?api_key={1}&query={2}&include_adult=false",
+                "{0}/search/{1}?api_key={2}&query={3}&include_adult=false",
                 BaseUrl,
+                mediaType.TmdbPathSegment(),
                 Uri.EscapeDataString(apiKey),
                 Uri.EscapeDataString(query));
 
             if (year.HasValue)
-                url += "&primary_release_year=" + year.Value;
+                url += (mediaType == ComingSoonMediaType.TvShow ? "&first_air_date_year=" : "&primary_release_year=") + year.Value;
 
             string raw = await FetchStringAsync(url, token).ConfigureAwait(false);
             if (string.IsNullOrEmpty(raw)) return new List<TmdbMovieResult>();
@@ -214,9 +216,11 @@ namespace ManageComingSoon.Services
             try
             {
                 var wrapper = this.json.DeserializeFromString<TmdbSearchWrapper>(raw);
-                return wrapper != null && wrapper.Results != null
+                var results = wrapper != null && wrapper.Results != null
                     ? wrapper.Results
                     : new List<TmdbMovieResult>();
+                foreach (var result in results) result.Normalize(mediaType);
+                return results;
             }
             catch (Exception ex)
             {
@@ -226,10 +230,10 @@ namespace ManageComingSoon.Services
         }
 
         private async Task<List<string>> GetAltTitlesAsync(
-            string apiKey, int movieId, CancellationToken token)
+            string apiKey, int movieId, ComingSoonMediaType mediaType, CancellationToken token)
         {
-            string url = string.Format("{0}/movie/{1}/alternative_titles?api_key={2}",
-                BaseUrl, movieId, Uri.EscapeDataString(apiKey));
+            string url = string.Format("{0}/{1}/{2}/alternative_titles?api_key={3}",
+                BaseUrl, mediaType.TmdbPathSegment(), movieId, Uri.EscapeDataString(apiKey));
 
             string raw = await FetchStringAsync(url, token).ConfigureAwait(false);
             if (string.IsNullOrEmpty(raw)) return new List<string>();
@@ -237,10 +241,10 @@ namespace ManageComingSoon.Services
             try
             {
                 var wrapper = this.json.DeserializeFromString<TmdbAltTitlesWrapper>(raw);
-                if (wrapper == null || wrapper.Titles == null) return new List<string>();
+                if (wrapper == null) return new List<string>();
 
                 var list = new List<string>();
-                foreach (var t in wrapper.Titles)
+                foreach (var t in wrapper.Titles ?? wrapper.Results ?? new List<TmdbAltTitle>())
                     if (!string.IsNullOrEmpty(t.Title))
                         list.Add(t.Title);
 
@@ -425,6 +429,7 @@ namespace ManageComingSoon.Services
         private class TmdbAltTitlesWrapper
         {
             public List<TmdbAltTitle> Titles { get; set; }
+            public List<TmdbAltTitle> Results { get; set; }
         }
 
         private class TmdbAltTitle

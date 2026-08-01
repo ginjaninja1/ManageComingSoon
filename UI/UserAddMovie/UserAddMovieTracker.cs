@@ -26,6 +26,7 @@
 
     internal sealed class UserMovieEntry
     {
+        public ComingSoonMediaType MediaType { get; set; }
         public string Id { get; set; }
         public DateTime CreatedAt { get; set; }
         public string SearchName { get; set; }
@@ -75,7 +76,7 @@
         private static readonly object Sync = new object();
         private static readonly List<UserMovieEntry> Entries = new List<UserMovieEntry>();
 
-        public static UserMovieEntry Add(string name, int? year)
+        public static UserMovieEntry Add(string name, int? year, ComingSoonMediaType mediaType)
         {
             var entry = new UserMovieEntry
             {
@@ -83,6 +84,7 @@
                 CreatedAt = DateTime.UtcNow,
                 SearchName = name,
                 SearchYear = year,
+                MediaType = mediaType,
                 State = UserMovieState.Searching,
                 IncludedInBulkAdd = false
             };
@@ -94,9 +96,9 @@
             }
         }
 
-        public static UserMovieEntry AddManual(string name, int? year)
+        public static UserMovieEntry AddManual(string name, int? year, ComingSoonMediaType mediaType)
         {
-            var entry = Add(name, year);
+            var entry = Add(name, year, mediaType);
             lock (Sync)
             {
                 entry.State = UserMovieState.Ready;
