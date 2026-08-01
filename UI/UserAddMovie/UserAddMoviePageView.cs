@@ -37,6 +37,12 @@
         private const int MaxBulkEntries = 25;
         private const int MaxDefaultCandidates = 3;
         private const int MaxExpandedCandidates = 10;
+        // A TV add has two independently bounded ingest checks (Series, then
+        // Episode) before its metadata refresh completes.  Keep the command
+        // response open for that work: ordinary-user pages cannot receive the
+        // admin-only push refresh used elsewhere in the plugin.
+        private static readonly TimeSpan TvCompletionWaitPerEntry =
+            TimeSpan.FromSeconds(145);
 
         private readonly ManageComingSoonPlugin plugin;
         private readonly TmdbService tmdbService;
@@ -317,7 +323,10 @@
             var queued = PrepareSubmission(new[] { entry });
             if (queued.Count == 0) return;
             StartAddTask();
-            await WaitForFastCompletionAsync(queued, TimeSpan.FromSeconds(4)).ConfigureAwait(false);
+            await WaitForCommandCompletionAsync(
+                queued,
+                GetCommandCompletionWait(queued, TimeSpan.FromSeconds(4)))
+                .ConfigureAwait(false);
             SyncSubmittedStates();
         }
 
@@ -335,9 +344,11 @@
             var queued = PrepareSubmission(selected);
             if (queued.Count == 0) return;
             StartAddTask();
-            await WaitForFastCompletionAsync(
+            await WaitForCommandCompletionAsync(
                 queued,
-                queued.Count == 1 ? TimeSpan.FromSeconds(4) : TimeSpan.FromSeconds(1))
+                GetCommandCompletionWait(
+                    queued,
+                    queued.Count == 1 ? TimeSpan.FromSeconds(4) : TimeSpan.FromSeconds(1)))
                 .ConfigureAwait(false);
             SyncSubmittedStates();
         }
@@ -397,7 +408,23 @@
             this.taskManager.Execute(worker, new TaskOptions());
         }
 
-        private async Task WaitForFastCompletionAsync(
+        private static TimeSpan GetCommandCompletionWait(
+            IList<UserMovieEntry> entries,
+            TimeSpan movieWait)
+        {
+            int tvCount = entries.Count(e => e.MediaType == ComingSoonMediaType.TvShow);
+            if (tvCount == 0) return movieWait;
+
+            // AddMovieTask processes entries serially. Allow every TV entry to
+            // reach its real terminal state, plus the task's five-second gap
+            // between consecutive entries. Movies retain their deliberately
+            // short fast-path response behaviour.
+            return TimeSpan.FromTicks(
+                (TvCompletionWaitPerEntry.Ticks * tvCount) +
+                (TimeSpan.FromSeconds(5).Ticks * Math.Max(0, entries.Count - 1)));
+        }
+
+        private async Task WaitForCommandCompletionAsync(
             IList<UserMovieEntry> entries,
             TimeSpan maximumWait)
         {
@@ -426,7 +453,11 @@
             local.State = UserMovieState.Submitted;
             local.ErrorMessage = null;
             StartAddTask();
-            await WaitForFastCompletionAsync(new[] { local }, TimeSpan.FromSeconds(4)).ConfigureAwait(false);
+            var retried = new[] { local };
+            await WaitForCommandCompletionAsync(
+                retried,
+                GetCommandCompletionWait(retried, TimeSpan.FromSeconds(4)))
+                .ConfigureAwait(false);
             SyncSubmittedStates();
         }
 
