@@ -346,7 +346,7 @@ namespace ManageComingSoon.UI.MakeLive
                 SetOverallStatus(
                     "Nothing to make live — all selected items failed the final check. See row status for details.",
                     ItemStatus.Failed);
-                RebuildMovieList();
+                RebuildMovieList(preserveStatus: true);
                 RaiseUIViewInfoChanged();
                 return;
             }

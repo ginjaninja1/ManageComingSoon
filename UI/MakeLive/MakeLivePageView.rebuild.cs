@@ -39,7 +39,7 @@ namespace ManageComingSoon.UI.MakeLive
         // it — that bug meant the percentage was never actually visible.
         // -----------------------------------------------------------------------
 
-        private void RebuildMovieList(double? taskPct = null)
+        private void RebuildMovieList(double? taskPct = null, bool preserveStatus = false)
         {
             var ui = UI;
             var newList = new GenericItemList();
@@ -129,7 +129,8 @@ namespace ManageComingSoon.UI.MakeLive
             }
 
             ui.MovieList = newList;
-            UpdateOverallStatus(taskPct);
+            if (!preserveStatus)
+                UpdateOverallStatus(taskPct);
         }
 
         // -----------------------------------------------------------------------
@@ -159,38 +160,7 @@ namespace ManageComingSoon.UI.MakeLive
                 return;
             }
 
-            var pending = MakeLiveTracker.GetAllPending();
-            if (pending.Length == 0 && MakeLiveTracker.GetHistory().Length == 0)
-            {
-                SetOverallStatus(
-                    "No Coming Soon movies found. Use the 'Add Coming Soon' tab to add some.",
-                    ItemStatus.Unavailable);
-                return;
-            }
-
-            int ready = 0, blocked = 0;
-            foreach (var e in pending)
-            {
-                if (e.Analysis != null && e.Analysis.IsSafeToProceed)
-                    ready++;
-                else
-                    blocked++;
-            }
-            int selected = pending.Count(e => e.ToggledOn);
-
-            var parts = new List<string>();
-            if (pending.Length > 0)
-                parts.Add(string.Format("{0} movie(s)", pending.Length));
-            if (ready > 0)
-                parts.Add(string.Format("{0} ready", ready));
-            if (blocked > 0)
-                parts.Add(string.Format("{0} blocked", blocked));
-            if (selected > 0)
-                parts.Add(string.Format("{0} selected", selected));
-
-            SetOverallStatus(
-                string.Join("  /  ", parts),
-                blocked > 0 ? ItemStatus.Warning : ItemStatus.Succeeded);
+            SetOverallStatus(string.Empty, ItemStatus.Unavailable);
         }
 
         private void SetOverallStatus(string message, ItemStatus status)

@@ -15,29 +15,33 @@
         public override string EditorTitle => "Add Coming Soon Titles";
 
         public override string EditorDescription =>
-            "Enter one movie and its year or \n[Advanced Usage] Multiple movies in one go via a ;,| split eg. Dune Part Two;2024|Gladiator II\n" +
-            "[Recomended]Click 'Identify via TMDB match' (TheMovieDatabase)  to confirm name [and year] against TMDB.\n" +
-            "You may need to select from multiple near matches.\n" +
-            "Click 'Add to Library'.\n" +
-            "A placeholder will be added to the 'coming soon' library [optionally with its trailer], pending addition to Emby when the bluray is released.";
+            "Enter a title and its year.\n" +
+            "Click [Identify via TMDB] (TheMovieDatabase)  to confirm name (and year) against TMDB.\n" +
+            "A TMDB match is useful to confirm you have the right title and year, and to get a trailer if available.\n" +
+            "Only use [Add Manual] if the title cannot be found on TMDB (possible with recently announced titles).\n" +
+            "You may need to [select] from multiple near matches on TMDB. Actors and tag line can help confirm correct match.\n" +
+            "Click [Add to Library].\n" +
+            "A placeholder will be added to the 'Coming Soon' library with a trailer where available.";
+
+        public SpacerItem Spacer1 { get; set; } = new SpacerItem();
 
         [Browsable(false)]
         public IEnumerable<EditorSelectOption> MediaTypeOptions { get; set; } =
             new[] { new EditorSelectOption("Movie", "Movie"), new EditorSelectOption("TvShow", "TV Show") };
 
-        [DisplayName("Content Type")]
+        [DisplayName("Content Type, choose [Movie] or [TV Show]")]
         [SelectItemsSource(nameof(MediaTypeOptions))]
         public string MediaType { get; set; } = "Movie";
 
         [DisplayName("Title")]
-        [Description("or Movie1;Year|Movie2|Movie3;Year...")]
+        [Description("or eg. Title1;Year|Title2|Title3;Year...to add multiple titles quickly")]
         public string MovieName { get; set; } = string.Empty;
 
         [DisplayName("Year (optional)")]
         public string ReleaseYear { get; set; } = string.Empty;
 
         public ButtonItem AddViaTmdbButton { get; set; } =
-            new ButtonItem("Identify via TMDB Match")
+            new ButtonItem("Identify via TMDB")
             {
                 Icon = IconNames.search,
                 Data1 = "AddViaTmdb",

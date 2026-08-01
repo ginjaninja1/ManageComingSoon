@@ -191,42 +191,14 @@ namespace ManageComingSoon.UI.AddMovie
         private void UpdateOverallStatus()
         {
             var entries = AddMovieTracker.GetAllSorted();
-
-            if (entries.Length == 0)
-            {
-                SetOverallStatus(string.Empty, ItemStatus.Unavailable);
-                return;
-            }
-
             int searching = entries.Count(e => e.State == AddMovieState.Searching);
-            int confident = entries.Count(e => e.State == AddMovieState.Confident && !e.IsAddBlocked);
-            int conflict = entries.Count(e => e.IsAddBlocked);
-            int multiple = entries.Count(e => e.State == AddMovieState.MultipleMatches);
-            int noResults = entries.Count(e => e.State == AddMovieState.NoResults
-                                             || e.State == AddMovieState.SearchFailed);
             int queued = entries.Count(e => e.State == AddMovieState.Queued);
             int adding = entries.Count(e => e.State == AddMovieState.Adding);
-            int added = entries.Count(e => e.State == AddMovieState.Added);
-            int failed = entries.Count(e => e.State == AddMovieState.AddFailed);
 
             var parts = new List<string>();
             if (searching > 0) parts.Add(string.Format("{0} searching", searching));
-            if (confident > 0) parts.Add(string.Format("{0} matched", confident));
-            if (multiple > 0) parts.Add(string.Format("{0} needs selection", multiple));
-            if (conflict > 0) parts.Add(string.Format("{0} target conflict", conflict));
             if (queued > 0) parts.Add(string.Format("{0} queued", queued));
             if (adding > 0) parts.Add(string.Format("{0} adding", adding));
-            if (added > 0) parts.Add(string.Format("{0} added", added));
-            if (noResults > 0) parts.Add(string.Format("{0} not found", noResults));
-            if (failed > 0) parts.Add(string.Format("{0} failed", failed));
-
-            ItemStatus status = ItemStatus.Unavailable;
-            if (adding > 0 || searching > 0 || queued > 0)
-                status = ItemStatus.InProgress;
-            else if (failed > 0 || noResults > 0 || conflict > 0 || multiple > 0)
-                status = ItemStatus.Warning;
-            else if (confident > 0 || added > 0)
-                status = ItemStatus.Succeeded;
 
             string statusMessage = string.Join("  /  ", parts);
 
@@ -247,7 +219,9 @@ namespace ManageComingSoon.UI.AddMovie
                     : statusMessage + "  /  " + refreshHint;
             }
 
-            SetOverallStatus(statusMessage, status);
+            SetOverallStatus(
+                statusMessage,
+                parts.Count > 0 ? ItemStatus.InProgress : ItemStatus.Unavailable);
         }
 
         private void SetOverallStatus(string message, ItemStatus status)

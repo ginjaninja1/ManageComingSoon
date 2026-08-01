@@ -162,7 +162,7 @@ namespace ManageComingSoon.UI.MakeLive
 
             MakeLiveTracker.ClearCurrentRun();
             LoadAndAnalyse();
-            RebuildMovieList();
+            RebuildMovieList(preserveStatus: true);
             RaiseUIViewInfoChanged();
         }
     }

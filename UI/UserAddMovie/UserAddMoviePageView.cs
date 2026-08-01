@@ -53,6 +53,7 @@
             new HashSet<string>(StringComparer.Ordinal);
         private readonly HashSet<string> expandedInfo =
             new HashSet<string>(StringComparer.Ordinal);
+        private bool interactionStatusSet;
 
         public UserAddMoviePageView(
             PluginInfo pluginInfo,
@@ -80,6 +81,7 @@
             string commandId,
             string data)
         {
+            this.interactionStatusSet = false;
             try
             {
                 if (commandId == "AddViaTmdb")
@@ -115,12 +117,12 @@
                 else
                     return await base.RunCommand(itemId, commandId, data).ConfigureAwait(false);
 
-                RebuildPage();
+                RebuildPage(preserveStatus: this.interactionStatusSet);
                 return this;
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("User Add Movie command failed", ex);
+                this.logger.ErrorException("User Add Title command failed", ex);
                 SetStatus("The request failed: " + ex.Message, ItemStatus.Failed);
                 RebuildPage(preserveStatus: true);
                 return this;
@@ -132,12 +134,12 @@
             var parsed = ParseBulkMovieInput(UI.MovieName, UI.ReleaseYear);
             if (parsed.Count == 0)
             {
-                SetStatus("Please enter a movie name.", ItemStatus.Failed);
+                SetStatus("Please enter a title.", ItemStatus.Failed);
                 return;
             }
             if (parsed.Count > MaxBulkEntries)
             {
-                SetStatus(string.Format("Please add {0} or fewer movies at a time.", MaxBulkEntries), ItemStatus.Failed);
+                SetStatus(string.Format("Please add {0} or fewer titles at a time.", MaxBulkEntries), ItemStatus.Failed);
                 return;
             }
             if (string.IsNullOrWhiteSpace(this.plugin.Configuration.TmdbApiKey))
@@ -155,7 +157,6 @@
 
             var searches = work.Select(pair => SearchEntryAsync(pair.Item1, pair.Item2.Name, pair.Item2.Year));
             await Task.WhenAll(searches).ConfigureAwait(false);
-            SetStatus(string.Format("TMDB matching completed for {0} movie(s).", work.Count), ItemStatus.Succeeded);
         }
 
         private void HandleAddManual()
@@ -163,12 +164,12 @@
             var parsed = ParseBulkMovieInput(UI.MovieName, UI.ReleaseYear);
             if (parsed.Count == 0)
             {
-                SetStatus("Please enter a movie name.", ItemStatus.Failed);
+                SetStatus("Please enter a title.", ItemStatus.Failed);
                 return;
             }
             if (parsed.Count > MaxBulkEntries)
             {
-                SetStatus(string.Format("Please add {0} or fewer movies at a time.", MaxBulkEntries), ItemStatus.Failed);
+                SetStatus(string.Format("Please add {0} or fewer titles at a time.", MaxBulkEntries), ItemStatus.Failed);
                 return;
             }
 
@@ -180,7 +181,6 @@
 
             UI.MovieName = string.Empty;
             UI.ReleaseYear = string.Empty;
-            SetStatus(string.Format("Prepared {0} manual movie(s). Review and submit below.", parsed.Count), ItemStatus.Succeeded);
         }
 
         private async Task SearchEntryAsync(UserMovieEntry entry, string name, int? year)
@@ -309,7 +309,6 @@
                 CheckDestination(entry);
                 if (entry.HasDestinationConflict)
                 {
-                    SetStatus(entry.ConflictReason, ItemStatus.Warning);
                     return;
                 }
             }
@@ -337,7 +336,7 @@
                 .ToArray();
             if (selected.Length == 0)
             {
-                SetStatus("No matched or manual movies are selected.", ItemStatus.Warning);
+                SetStatus("No matched or manual titles are selected.", ItemStatus.Warning);
                 return;
             }
 
@@ -392,10 +391,6 @@
                 queued.Add(entry);
             }
 
-            if (queued.Count > 0)
-                SetStatus(string.Format("Submitted {0} movie(s). Most additions finish within a few seconds. Use Refresh Status if any remain pending.", queued.Count), ItemStatus.Succeeded);
-            else
-                SetStatus("Nothing was submitted. Resolve the highlighted conflicts first.", ItemStatus.Warning);
             return queued;
         }
 
@@ -404,7 +399,7 @@
             var worker = this.taskManager.ScheduledTasks
                 .FirstOrDefault(t => t.ScheduledTask is AddMovieTask);
             if (worker == null)
-                throw new InvalidOperationException("The Add Movie scheduled task was not found.");
+                throw new InvalidOperationException("The title addition task was not found.");
             this.taskManager.Execute(worker, new TaskOptions());
         }
 
@@ -496,7 +491,8 @@
             if (entry == null) return;
             if (entry.State == UserMovieState.Adding)
             {
-                SetStatus("A movie cannot be removed from this page while the server is adding it.", ItemStatus.Warning);
+                SetStatus("This " + entry.MediaType.DisplayName().ToLowerInvariant() +
+                    " cannot be removed while the server is adding it.", ItemStatus.Warning);
                 return;
             }
             this.expandedCandidates.Remove(id);
@@ -548,7 +544,7 @@
                 if (Directory.Exists(destination))
                 {
                     entry.HasDestinationConflict = true;
-                    entry.ConflictReason = "Movie already coming soon";
+                    entry.ConflictReason = entry.MediaType.DisplayName() + " already coming soon";
                     entry.IncludedInBulkAdd = false;
                 }
             }
@@ -789,7 +785,7 @@
                 case UserMovieState.NoResults: return "No TMDB result — use Manual or remove this entry.";
                 case UserMovieState.SearchFailed: return "TMDB search failed: " + Truncate(entry.ErrorMessage, 110);
                 case UserMovieState.Submitted: return "Submitted to the server. Use Refresh Status if this remains pending.";
-                case UserMovieState.Adding: return "The server is adding this movie.";
+                case UserMovieState.Adding: return "The server is adding this " + entry.MediaType.DisplayName().ToLowerInvariant() + ".";
                 case UserMovieState.Added: return string.IsNullOrEmpty(entry.DestinationPath) ? "Added successfully." : "Added: " + entry.DestinationPath;
                 case UserMovieState.AddFailed: return "Add failed: " + Truncate(entry.ErrorMessage, 110);
                 default: return string.Empty;
@@ -826,30 +822,13 @@
 
         private void UpdateOverallStatus()
         {
-            var entries = UserAddMovieTracker.GetAll();
-            if (entries.Length == 0)
-            {
-                SetStatus("No movies are currently in your request list.", ItemStatus.Unavailable);
-                return;
-            }
-            int ready = entries.Count(e => e.State == UserMovieState.Ready && !e.HasDestinationConflict);
-            int attention = entries.Count(e => e.State == UserMovieState.MultipleMatches || e.State == UserMovieState.NoResults || e.State == UserMovieState.SearchFailed || e.HasDestinationConflict);
-            int pending = entries.Count(e => e.State == UserMovieState.Submitted || e.State == UserMovieState.Adding);
-            int added = entries.Count(e => e.State == UserMovieState.Added);
-            int failed = entries.Count(e => e.State == UserMovieState.AddFailed);
-            var parts = new List<string>();
-            if (ready > 0) parts.Add(ready + " ready");
-            if (attention > 0) parts.Add(attention + " need attention");
-            if (pending > 0) parts.Add(pending + " pending");
-            if (added > 0) parts.Add(added + " added");
-            if (failed > 0) parts.Add(failed + " failed");
-            if (pending > 0) parts.Add("Refresh Status may be needed because ordinary-user pages cannot receive background push updates");
-            SetStatus(string.Join("  /  ", parts),
-                failed > 0 ? ItemStatus.Warning : pending > 0 ? ItemStatus.InProgress : attention > 0 ? ItemStatus.Warning : ItemStatus.Succeeded);
+            UI.OverallStatus.StatusText = string.Empty;
+            UI.OverallStatus.Status = ItemStatus.Unavailable;
         }
 
         private void SetStatus(string text, ItemStatus status)
         {
+            this.interactionStatusSet = true;
             UI.OverallStatus.StatusText = text ?? string.Empty;
             UI.OverallStatus.Status = status;
         }
