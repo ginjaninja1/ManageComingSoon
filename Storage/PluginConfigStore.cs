@@ -76,7 +76,7 @@ namespace ManageComingSoon.Storage
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("ManageComingSoon: Failed to load config", ex);
+                this.logger.ErrorException("[ManageComingSoon][Storage] Failed to load config", ex);
                 return this.cached = new PluginConfiguration();
             }
         }

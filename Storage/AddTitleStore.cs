@@ -82,7 +82,7 @@ namespace ManageComingSoon.Storage
             catch (Exception ex)
             {
                 this.logger.ErrorException(
-                    "ManageComingSoon: AddTitleStore failed to load – returning empty list", ex);
+                    "[ManageComingSoon][Storage] AddTitleStore failed to load – returning empty list", ex);
                 return new List<AddTitleEntry>();
             }
         }
@@ -101,7 +101,7 @@ namespace ManageComingSoon.Storage
             catch (Exception ex)
             {
                 this.logger.ErrorException(
-                    "ManageComingSoon: AddTitleStore failed to save", ex);
+                    "[ManageComingSoon][Storage] AddTitleStore failed to save", ex);
             }
         }
     }

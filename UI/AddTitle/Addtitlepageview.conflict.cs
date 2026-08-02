@@ -108,7 +108,7 @@ namespace ManageComingSoon.UI.AddTitle
                     catch (Exception ex)
                     {
                         this.logger.Warn(
-                            "Destination check failed for '{0}': {1}",
+                            "[ManageComingSoon][DestinationCheck]" + UserTag() + " Destination check failed for '{0}': {1}",
                             entry.ConfirmedTitle, ex.Message);
                         return false;
                     }

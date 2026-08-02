@@ -55,6 +55,13 @@ namespace ManageComingSoon.UI.UserAddTitle
             new HashSet<string>(StringComparer.Ordinal);
         private bool interactionStatusSet;
 
+        // Formats the current session's username for log-line prefixing.
+        // this.User is populated by the SDK per-request/session and is not
+        // guaranteed non-null at every call site, so this always falls back
+        // to a safe placeholder rather than risking a NullReferenceException
+        // from inside a log call.
+        private string UserTag() => "[" + (this.User?.Name ?? "unknown") + "]";
+
         public UserAddTitlePageView(
             PluginInfo pluginInfo,
             ManageComingSoonPlugin plugin,
@@ -122,7 +129,7 @@ namespace ManageComingSoon.UI.UserAddTitle
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("User Add Title command failed", ex);
+                this.logger.ErrorException("[ManageComingSoon][UserAddTitle]" + UserTag() + " User Add Title command failed", ex);
                 SetStatus("The request failed: " + ex.Message, ItemStatus.Failed);
                 RebuildPage(preserveStatus: true);
                 return this;
@@ -221,7 +228,7 @@ namespace ManageComingSoon.UI.UserAddTitle
             {
                 entry.State = UserTitleState.SearchFailed;
                 entry.ErrorMessage = ex.Message;
-                this.logger.ErrorException("TMDB search failed for '{0}'", ex, name);
+                this.logger.ErrorException("[ManageComingSoon][UserAddTitle]" + UserTag() + " TMDB search failed for '{0}'", ex, name);
             }
         }
 
@@ -295,7 +302,7 @@ namespace ManageComingSoon.UI.UserAddTitle
                 catch (Exception ex)
                 {
                     candidate.CastNames = new List<string>();
-                    this.logger.ErrorException("TMDB cast lookup failed for '{0}'", ex, candidate.TitleResult.Title);
+                    this.logger.ErrorException("[ManageComingSoon][UserAddTitle]" + UserTag() + " TMDB cast lookup failed for '{0}'", ex, candidate.TitleResult.Title);
                 }
             }
         }

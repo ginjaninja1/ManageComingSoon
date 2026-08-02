@@ -160,28 +160,6 @@ namespace ManageComingSoon.UI.AddTitle
             ui.TitleList = titleList;
             ui.CompletedList = completedList;
 
-            // Diagnostic: row counts actually sent to the client on this
-            // broadcast, tagged with the instance that produced them and a
-            // per-instance monotonic sequence number.
-            //   - If active/completed counts here don't move in a clean
-            //     staircase (e.g. 5,4,3,2,1,0) that matches what the browser
-            //     shows a moment later, the server itself is the source —
-            //     look at AddTitleTracker's mutation methods / GetAllSorted.
-            //   - If the counts here DO move cleanly but the browser still
-            //     flickers, the problem is downstream of this method: either
-            //     multiple instanceId values are interleaved (see the
-            //     construct/dispose log lines), or the client itself.
-            //   - If more than one distinct instanceId appears with
-            //     overlapping "constructed"/"disposed" log lines, that alone
-            //     confirms duplicate live AddTitlePageView instances.
-            this.logger.Info(
-                "MCS-DIAG instance={0} event=rows seq={1} active={2} completed={3} names=[{4}]",
-                this.instanceId,
-                System.Threading.Interlocked.Increment(ref this.broadcastSeq),
-                active.Length,
-                completed.Length,
-                string.Join(", ", active.Take(5)
-                    .Select(e => string.Format("{0}[{1}]", e.DisplayTitle, e.State))));
         }
 
         // -----------------------------------------------------------------------

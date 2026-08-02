@@ -199,7 +199,7 @@ namespace ManageComingSoon.Services
                 OnStageMessage = onStageMessage,
             };
 
-            this.logger.Info("[Pipeline/Start]{0} ===== START ===== folder={1} move={2}",
+            this.logger.Info("[ManageComingSoon][Pipeline/Start]{0} ===== START ===== folder={1} move={2}",
                 ctx.LogContext, folderPath, ctx.MoveRequested);
 
             try
@@ -255,7 +255,7 @@ namespace ManageComingSoon.Services
                     if (suppressMonitor)
                     {
                         this.logger.Info(
-                            "[Pipeline/MoveFiles]{0} Suppressing LibraryMonitor for source and destination during move.",
+                            "[ManageComingSoon][Pipeline/MoveFiles]{0} Suppressing LibraryMonitor for source and destination during move.",
                             ctx.LogContext);
                         this.libraryMonitor.ReportFileSystemChangeBeginning(ctx.SourceFolderPath);
                         this.libraryMonitor.ReportFileSystemChangeBeginning(ctx.TargetMovieFolderPath);
@@ -328,7 +328,7 @@ namespace ManageComingSoon.Services
                 Stage_UnlockTags(ctx);
                 Report(progress, MakeLiveStage.UnlockTags);
 
-                this.logger.Info("[Pipeline/Complete]{0} ===== SUCCESS =====", ctx.LogContext);
+                this.logger.Info("[ManageComingSoon][Pipeline/Complete]{0} ===== SUCCESS =====", ctx.LogContext);
                 Report(progress, MakeLiveStage.Complete);
 
                 return new MakeLiveResult
@@ -341,7 +341,7 @@ namespace ManageComingSoon.Services
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("[Pipeline]{0} Unhandled exception", ex, ctx.LogContext);
+                this.logger.ErrorException("[ManageComingSoon][Pipeline]{0} Unhandled exception", ex, ctx.LogContext);
                 return Fail(ctx, MakeLiveStage.Complete,
                     "Unhandled exception — see server log: " + ex.Message);
             }
@@ -366,7 +366,7 @@ namespace ManageComingSoon.Services
             BaseItem[] sourceEpisodes = FindEpisodesForSeries(folderPath, sourceSeasons);
 
             this.logger.Info(
-                "[TvMakeLive/CaptureGraph]{0} Series InternalId={1} Id={2} ParentId={3} Path='{4}'; " +
+                "[ManageComingSoon][TvMakeLive/CaptureGraph]{0} Series InternalId={1} Id={2} ParentId={3} Path='{4}'; " +
                 "captured {5} Season(s), {6} Episode(s).",
                 log, sourceSeries.InternalId, sourceSeries.Id, sourceSeries.ParentId,
                 sourceSeries.Path, sourceSeasons.Length, sourceEpisodes.Length);
@@ -384,7 +384,7 @@ namespace ManageComingSoon.Services
             string stubPath = sourceStubEpisode.Path;
             string targetEpisodePath = RebaseTvPath(stubPath, folderPath, destination);
             this.logger.Info(
-                "[TvMakeLive/CaptureGraph]{0} Selected placeholder from Episode database row: " +
+                "[ManageComingSoon][TvMakeLive/CaptureGraph]{0} Selected placeholder from Episode database row: " +
                 "InternalId={1} Path='{2}' -> target Path='{3}'.",
                 log, originalStubEpisodeInternalId, stubPath, targetEpisodePath);
 
@@ -460,7 +460,7 @@ namespace ManageComingSoon.Services
                         this.libraryManager.UpdateItem(
                             episode, episode.GetParent(), ItemUpdateType.MetadataEdit, null);
                         this.logger.Info(
-                            "[TvMakeLive/RehomeGraph]{0} Episode InternalId={1} ParentId={2} path '{3}' -> '{4}'.",
+                            "[ManageComingSoon][TvMakeLive/RehomeGraph]{0} Episode InternalId={1} ParentId={2} path '{3}' -> '{4}'.",
                             log, episode.InternalId, episode.ParentId, oldPath, episode.Path);
                     }
                 }
@@ -518,7 +518,7 @@ namespace ManageComingSoon.Services
                     // the destination-derived children beneath the preserved
                     // Series.
                     this.logger.Info(
-                        "[TvMakeLive/RediscoverDerivedChildren]{0} No Episode currently has destination Path '{1}'. " +
+                        "[ManageComingSoon][TvMakeLive/RediscoverDerivedChildren]{0} No Episode currently has destination Path '{1}'. " +
                         "Running a second target CollectionFolder ValidationOnly pass.",
                         log, targetEpisodePath);
                     onStageMessage?.Invoke("Discovering destination episode…");
@@ -545,7 +545,7 @@ namespace ManageComingSoon.Services
                         this.libraryManager.GetItemById(originalStubEpisodeInternalId), log);
                     BaseItem[] pathMatches = FindAllEpisodesByPath(targetEpisodePath);
                     this.logger.Warn(
-                        "[TvMakeLive/ConfirmTargetEpisodeFailed]{0} Episodes whose stored Path equals '{1}': [{2}].",
+                        "[ManageComingSoon][TvMakeLive/ConfirmTargetEpisodeFailed]{0} Episodes whose stored Path equals '{1}': [{2}].",
                         log, targetEpisodePath,
                         string.Join(",", pathMatches.Select(item =>
                             item.InternalId + "/" + item.Id)));
@@ -560,7 +560,7 @@ namespace ManageComingSoon.Services
                 BaseItem[] episodesAtDestination = FindAllEpisodesByPath(targetEpisodePath);
                 bool duplicateDetected = seriesAtDestination.Length > 1 || episodesAtDestination.Length > 1;
                 this.logger.Info(
-                    "[TvMakeLive/IdentityCheck]{0} destination Series IDs=[{1}] Episode IDs=[{2}]; " +
+                    "[ManageComingSoon][TvMakeLive/IdentityCheck]{0} destination Series IDs=[{1}] Episode IDs=[{2}]; " +
                     "expected preserved Series={3}; source Episode={4}, destination Episode={5}; " +
                     "Episode identity preserved={6}; duplicate={7}.",
                     log,
@@ -620,7 +620,7 @@ namespace ManageComingSoon.Services
                         FailureReason = "A tagged Series still remains after the move." };
 
                 Report(progress, MakeLiveStage.Complete);
-                this.logger.Info("[TvPipeline/Complete]{0} Series '{1}' made live at '{2}'.",
+                this.logger.Info("[ManageComingSoon][TvPipeline/Complete]{0} Series '{1}' made live at '{2}'.",
                     log, targetSeries.Name, destination);
                 return new MakeLiveResult { Success = true, FinalItemId = targetSeries.Id,
                     IdentityPreserved = targetSeries.InternalId == originalSeriesInternalId &&
@@ -629,7 +629,7 @@ namespace ManageComingSoon.Services
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("[TvPipeline]{0} Failed", ex, log);
+                this.logger.ErrorException("[ManageComingSoon][TvPipeline]{0} Failed", ex, log);
                 return new MakeLiveResult { Success = false, FailedAtStage = MakeLiveStage.Complete,
                     FailureReason = ex.Message };
             }
@@ -691,7 +691,7 @@ namespace ManageComingSoon.Services
             long parentId = sampleSeries?.ParentId ?? targetLibrary.InternalId;
             Folder parent = this.libraryManager.GetItemById(parentId) as Folder;
             this.logger.Info(
-                "[TvMakeLive/ResolveTargetParent]{0} Target CollectionFolder InternalId={1} Path='{2}'; " +
+                "[ManageComingSoon][TvMakeLive/ResolveTargetParent]{0} Target CollectionFolder InternalId={1} Path='{2}'; " +
                 "sample Series InternalId={3} ParentId={4} Path='{5}'; selected parent InternalId={6} Type={7} Path='{8}'.",
                 log, targetLibrary.InternalId, targetLibrary.Path,
                 sampleSeries?.InternalId.ToString() ?? "none",
@@ -722,7 +722,7 @@ namespace ManageComingSoon.Services
         {
             if (item == null)
             {
-                this.logger.Warn("[{0}]{1} {2}: <null>", stage, log, label);
+                this.logger.Warn("[ManageComingSoon][{0}]{1} {2}: <null>", stage, log, label);
                 return;
             }
 
@@ -730,10 +730,10 @@ namespace ManageComingSoon.Services
             try { parent = item.GetParent(); }
             catch (Exception ex)
             {
-                this.logger.Warn("[{0}]{1} {2} parent lookup failed: {3}", stage, log, label, ex.Message);
+                this.logger.Warn("[ManageComingSoon][{0}]{1} {2} parent lookup failed: {3}", stage, log, label, ex.Message);
             }
             this.logger.Info(
-                "[{0}]{1} {2}: InternalId={3} Id={4} Type={5} ParentId={6} " +
+                "[ManageComingSoon][{0}]{1} {2}: InternalId={3} Id={4} Type={5} ParentId={6} " +
                 "ParentInternalId={7} ParentType={8} SeasonNumber={9} EpisodeNumber={10} " +
                 "Path='{11}' Tags=[{12}].",
                 stage, log, label, item.InternalId, item.Id, item.GetType().Name,
@@ -783,7 +783,7 @@ namespace ManageComingSoon.Services
             ctx.Movie = FindMovieInFolder(ctx.SourceFolderPath);
             if (ctx.Movie == null)
             {
-                this.logger.Warn("[Pipeline/CaptureState]{0} No tagged Movie found in {1}",
+                this.logger.Warn("[ManageComingSoon][Pipeline/CaptureState]{0} No tagged Movie found in {1}",
                     ctx.LogContext, ctx.SourceFolderPath);
                 return false;
             }
@@ -796,7 +796,7 @@ namespace ManageComingSoon.Services
 
             ctx.SourceLibrary = FindCollectionFolder(ctx.SourceFolderPath);
             if (ctx.SourceLibrary == null)
-                this.logger.Warn("[Pipeline/CaptureState]{0} Could not resolve source CollectionFolder.", ctx.LogContext);
+                this.logger.Warn("[ManageComingSoon][Pipeline/CaptureState]{0} Could not resolve source CollectionFolder.", ctx.LogContext);
 
             if (ctx.MoveRequested)
             {
@@ -807,7 +807,7 @@ namespace ManageComingSoon.Services
 
                 ctx.TargetLibrary = FindCollectionFolder(ctx.TargetLibraryRootPath);
                 if (ctx.TargetLibrary == null)
-                    this.logger.Warn("[Pipeline/CaptureState]{0} Could not resolve target CollectionFolder.", ctx.LogContext);
+                    this.logger.Warn("[ManageComingSoon][Pipeline/CaptureState]{0} Could not resolve target CollectionFolder.", ctx.LogContext);
             }
 
             ctx.SourceFolder = this.libraryManager.FindByPath(ctx.SourceFolderPath, true) as Folder;
@@ -825,13 +825,13 @@ namespace ManageComingSoon.Services
             try
             {
                 Directory.CreateDirectory(ctx.TargetMovieFolderPath);
-                this.logger.Info("[Pipeline/CreateTargetFolder]{0} Created: {1}",
+                this.logger.Info("[ManageComingSoon][Pipeline/CreateTargetFolder]{0} Created: {1}",
                     ctx.LogContext, ctx.TargetMovieFolderPath);
             }
             catch (Exception ex)
             {
                 this.logger.ErrorException(
-                    "[Pipeline/CreateTargetFolder]{0} Failed to create {1}",
+                    "[ManageComingSoon][Pipeline/CreateTargetFolder]{0} Failed to create {1}",
                     ex, ctx.LogContext, ctx.TargetMovieFolderPath);
                 return false;
             }
@@ -852,7 +852,7 @@ namespace ManageComingSoon.Services
             catch (Exception ex)
             {
                 this.logger.ErrorException(
-                    "[Pipeline/CreateTargetFolder]{0} Bootstrap refresh failed", ex, ctx.LogContext);
+                    "[ManageComingSoon][Pipeline/CreateTargetFolder]{0} Bootstrap refresh failed", ex, ctx.LogContext);
                 return false;
             }
 
@@ -875,7 +875,7 @@ namespace ManageComingSoon.Services
             if (!met)
             {
                 this.logger.Warn(
-                    "[Pipeline/EstablishTargetIds]{0} DestinationFolder not ingested in time at {1}",
+                    "[ManageComingSoon][Pipeline/EstablishTargetIds]{0} DestinationFolder not ingested in time at {1}",
                     ctx.LogContext, ctx.TargetMovieFolderPath);
                 return false;
             }
@@ -912,14 +912,14 @@ namespace ManageComingSoon.Services
                     Directory.Move(dirPath, destDir);
                 }
 
-                this.logger.Info("[Pipeline/MoveFiles]{0} Moved contents of '{1}' → '{2}'",
+                this.logger.Info("[ManageComingSoon][Pipeline/MoveFiles]{0} Moved contents of '{1}' → '{2}'",
                     ctx.LogContext, ctx.SourceFolderPath, ctx.TargetMovieFolderPath);
                 return true;
             }
             catch (Exception ex)
             {
                 this.logger.ErrorException(
-                    "[Pipeline/MoveFiles]{0} Failed moving folder contents into '{1}'",
+                    "[ManageComingSoon][Pipeline/MoveFiles]{0} Failed moving folder contents into '{1}'",
                     ex, ctx.LogContext, ctx.TargetMovieFolderPath);
                 return false;
             }
@@ -949,7 +949,7 @@ namespace ManageComingSoon.Services
             string stubPath = ctx.MovieOriginalVideoPath;
 
             this.logger.Debug(
-                "[Pipeline/StubPreflight]{0} Checking placeholder at '{1}' (database path) against " +
+                "[ManageComingSoon][Pipeline/StubPreflight]{0} Checking placeholder at '{1}' (database path) against " +
                 "configured max {2} MB.", ctx.LogContext, stubPath, ctx.MaxStubFileSizeMb);
 
             if (string.IsNullOrEmpty(stubPath) || !File.Exists(stubPath))
@@ -959,7 +959,7 @@ namespace ManageComingSoon.Services
                     "found there on disk. The database and filesystem are out of sync for this item " +
                     "— resolve manually before retrying.",
                     stubPath);
-                this.logger.Warn("[Pipeline/StubPreflight]{0} {1}", ctx.LogContext, failureReason);
+                this.logger.Warn("[ManageComingSoon][Pipeline/StubPreflight]{0} {1}", ctx.LogContext, failureReason);
                 return false;
             }
 
@@ -972,7 +972,7 @@ namespace ManageComingSoon.Services
             {
                 failureReason = string.Format(
                     "Could not read the placeholder's file size at '{0}': {1}", stubPath, ex.Message);
-                this.logger.Warn("[Pipeline/StubPreflight]{0} {1}", ctx.LogContext, failureReason);
+                this.logger.Warn("[ManageComingSoon][Pipeline/StubPreflight]{0} {1}", ctx.LogContext, failureReason);
                 return false;
             }
 
@@ -984,12 +984,12 @@ namespace ManageComingSoon.Services
                     "Refusing to proceed with stub deletion enabled — increase the limit on the " +
                     "Configuration tab, or disable stub deletion, then retry.",
                     Path.GetFileName(stubPath), sizeBytes / (1024.0 * 1024.0), ctx.MaxStubFileSizeMb);
-                this.logger.Warn("[Pipeline/StubPreflight]{0} {1}", ctx.LogContext, failureReason);
+                this.logger.Warn("[ManageComingSoon][Pipeline/StubPreflight]{0} {1}", ctx.LogContext, failureReason);
                 return false;
             }
 
             this.logger.Debug(
-                "[Pipeline/StubPreflight]{0} OK: '{1}' is {2:N0} bytes (limit {3} MB).",
+                "[ManageComingSoon][Pipeline/StubPreflight]{0} OK: '{1}' is {2:N0} bytes (limit {3} MB).",
                 ctx.LogContext, stubPath, sizeBytes, ctx.MaxStubFileSizeMb);
             return true;
         }
@@ -1018,7 +1018,7 @@ namespace ManageComingSoon.Services
             if (string.IsNullOrEmpty(stubPath) || !File.Exists(stubPath))
             {
                 this.logger.Info(
-                    "[Pipeline/DeletePlaceholderStub]{0} Stub not found at '{1}' (already removed?).",
+                    "[ManageComingSoon][Pipeline/DeletePlaceholderStub]{0} Stub not found at '{1}' (already removed?).",
                     ctx.LogContext, stubPath);
                 return;
             }
@@ -1031,7 +1031,7 @@ namespace ManageComingSoon.Services
             catch (Exception ex)
             {
                 this.logger.Warn(
-                    "[Pipeline/DeletePlaceholderStub]{0} Could not read size of '{1}': {2}. Skipping delete.",
+                    "[ManageComingSoon][Pipeline/DeletePlaceholderStub]{0} Could not read size of '{1}': {2}. Skipping delete.",
                     ctx.LogContext, stubPath, ex.Message);
                 return;
             }
@@ -1040,7 +1040,7 @@ namespace ManageComingSoon.Services
             if (sizeBytes > maxBytes)
             {
                 this.logger.Warn(
-                    "[Pipeline/DeletePlaceholderStub]{0} File at '{1}' is {2:N0} bytes (exceeds " +
+                    "[ManageComingSoon][Pipeline/DeletePlaceholderStub]{0} File at '{1}' is {2:N0} bytes (exceeds " +
                     "configured {3} MB stub threshold). Not deleting to avoid data loss. This should " +
                     "already have been caught by the preflight check — remove manually if it is " +
                     "genuinely a stub.",
@@ -1051,13 +1051,13 @@ namespace ManageComingSoon.Services
             try
             {
                 File.Delete(stubPath);
-                this.logger.Info("[Pipeline/DeletePlaceholderStub]{0} Stub deleted: {1}",
+                this.logger.Info("[ManageComingSoon][Pipeline/DeletePlaceholderStub]{0} Stub deleted: {1}",
                     ctx.LogContext, stubPath);
             }
             catch (Exception ex)
             {
                 this.logger.Warn(
-                    "[Pipeline/DeletePlaceholderStub]{0} Could not delete stub '{1}': {2}",
+                    "[ManageComingSoon][Pipeline/DeletePlaceholderStub]{0} Could not delete stub '{1}': {2}",
                     ctx.LogContext, stubPath, ex.Message);
                 return;
             }
@@ -1088,7 +1088,7 @@ namespace ManageComingSoon.Services
             catch (Exception ex)
             {
                 this.logger.Warn(
-                    "[Pipeline/DeletePlaceholderStub]{0} Follow-up refresh failed (non-fatal): {1}",
+                    "[ManageComingSoon][Pipeline/DeletePlaceholderStub]{0} Follow-up refresh failed (non-fatal): {1}",
                     ctx.LogContext, ex.Message);
             }
         }
@@ -1122,7 +1122,7 @@ namespace ManageComingSoon.Services
             if (ctx.DeleteStub)
             {
                 this.logger.Debug(
-                    "[Pipeline/UnlockTags]{0} Skipped — stub deletion means this row is expected to " +
+                    "[ManageComingSoon][Pipeline/UnlockTags]{0} Skipped — stub deletion means this row is expected to " +
                     "be superseded once real content lands.", ctx.LogContext);
                 return;
             }
@@ -1130,7 +1130,7 @@ namespace ManageComingSoon.Services
             if (!ctx.UnlockTags)
             {
                 this.logger.Debug(
-                    "[Pipeline/UnlockTags]{0} Skipped — disabled in Configuration.", ctx.LogContext);
+                    "[ManageComingSoon][Pipeline/UnlockTags]{0} Skipped — disabled in Configuration.", ctx.LogContext);
                 return;
             }
 
@@ -1142,7 +1142,7 @@ namespace ManageComingSoon.Services
             catch (Exception ex)
             {
                 this.logger.Warn(
-                    "[Pipeline/UnlockTags]{0} Lookup by InternalId={1} failed: {2}. Non-fatal, continuing.",
+                    "[ManageComingSoon][Pipeline/UnlockTags]{0} Lookup by InternalId={1} failed: {2}. Non-fatal, continuing.",
                     ctx.LogContext, ctx.MovieOriginalInternalId, ex.Message);
                 return;
             }
@@ -1150,7 +1150,7 @@ namespace ManageComingSoon.Services
             if (current == null)
             {
                 this.logger.Warn(
-                    "[Pipeline/UnlockTags]{0} Movie no longer present in the library (InternalId={1}) " +
+                    "[ManageComingSoon][Pipeline/UnlockTags]{0} Movie no longer present in the library (InternalId={1}) " +
                     "— unexpected since no stub deletion occurred. Non-fatal, continuing.",
                     ctx.LogContext, ctx.MovieOriginalInternalId);
                 return;
@@ -1160,7 +1160,7 @@ namespace ManageComingSoon.Services
                 !current.LockedFields.Contains(MediaBrowser.Model.Entities.MetadataFields.Tags))
             {
                 this.logger.Debug(
-                    "[Pipeline/UnlockTags]{0} Tags not locked — nothing to unlock.", ctx.LogContext);
+                    "[ManageComingSoon][Pipeline/UnlockTags]{0} Tags not locked — nothing to unlock.", ctx.LogContext);
                 return;
             }
 
@@ -1170,12 +1170,12 @@ namespace ManageComingSoon.Services
                     .Where(f => f != MediaBrowser.Model.Entities.MetadataFields.Tags)
                     .ToArray();
                 this.libraryManager.UpdateItem(current, current.GetParent(), ItemUpdateType.MetadataEdit, null);
-                this.logger.Info("[Pipeline/UnlockTags]{0} Tags field unlocked.", ctx.LogContext);
+                this.logger.Info("[ManageComingSoon][Pipeline/UnlockTags]{0} Tags field unlocked.", ctx.LogContext);
             }
             catch (Exception ex)
             {
                 this.logger.Warn(
-                    "[Pipeline/UnlockTags]{0} Could not unlock Tags: {1}. Non-fatal, continuing.",
+                    "[ManageComingSoon][Pipeline/UnlockTags]{0} Could not unlock Tags: {1}. Non-fatal, continuing.",
                     ctx.LogContext, ex.Message);
             }
         }
@@ -1209,7 +1209,7 @@ namespace ManageComingSoon.Services
                 catch (Exception ex)
                 {
                     this.logger.ErrorException(
-                        "[Pipeline/LibraryUpdateAndRefresh]{0} Default refresh failed", ex, ctx.LogContext);
+                        "[ManageComingSoon][Pipeline/LibraryUpdateAndRefresh]{0} Default refresh failed", ex, ctx.LogContext);
                     return false;
                 }
                 return true;
@@ -1238,7 +1238,7 @@ namespace ManageComingSoon.Services
                     "Movie", ctx.Movie);
 
                 this.logger.Info(
-                    "[Pipeline/LibraryUpdateAndRefresh]{0} Reparented onto target Folder InternalId={1} ('{2}').",
+                    "[ManageComingSoon][Pipeline/LibraryUpdateAndRefresh]{0} Reparented onto target Folder InternalId={1} ('{2}').",
                     ctx.LogContext, ctx.DestinationFolder.InternalId, ctx.DestinationFolder.Path);
             }
             else
@@ -1264,7 +1264,7 @@ namespace ManageComingSoon.Services
             catch (Exception ex)
             {
                 this.logger.ErrorException(
-                    "[Pipeline/LibraryUpdateAndRefresh]{0} Default refresh failed for target library",
+                    "[ManageComingSoon][Pipeline/LibraryUpdateAndRefresh]{0} Default refresh failed for target library",
                     ex, ctx.LogContext);
                 return false;
             }
@@ -1321,21 +1321,21 @@ namespace ManageComingSoon.Services
                     if (!isEmpty)
                     {
                         this.logger.Warn(
-                            "[Pipeline/CleanupSourceFolder]{0} '{1}' is not empty — leaving in place " +
+                            "[ManageComingSoon][Pipeline/CleanupSourceFolder]{0} '{1}' is not empty — leaving in place " +
                             "rather than risk deleting unmoved content. Remove manually if appropriate.",
                             ctx.LogContext, ctx.SourceFolderPath);
                         return;
                     }
 
                     Directory.Delete(ctx.SourceFolderPath, recursive: false);
-                    this.logger.Info("[Pipeline/CleanupSourceFolder]{0} Removed empty source folder '{1}'.",
+                    this.logger.Info("[ManageComingSoon][Pipeline/CleanupSourceFolder]{0} Removed empty source folder '{1}'.",
                         ctx.LogContext, ctx.SourceFolderPath);
                 }
             }
             catch (Exception ex)
             {
                 this.logger.Warn(
-                    "[Pipeline/CleanupSourceFolder]{0} Could not remove '{1}': {2} (non-fatal).",
+                    "[ManageComingSoon][Pipeline/CleanupSourceFolder]{0} Could not remove '{1}': {2} (non-fatal).",
                     ctx.LogContext, ctx.SourceFolderPath, ex.Message);
                 return;
             }
@@ -1377,7 +1377,7 @@ namespace ManageComingSoon.Services
             catch (Exception ex)
             {
                 this.logger.Warn(
-                    "[Pipeline/CleanupSourceFolder]{0} Refresh failed (non-fatal): {1}",
+                    "[ManageComingSoon][Pipeline/CleanupSourceFolder]{0} Refresh failed (non-fatal): {1}",
                     ctx.LogContext, ex.Message);
                 return;
             }
@@ -1414,7 +1414,7 @@ namespace ManageComingSoon.Services
             if (duplicateDetected)
             {
                 this.logger.Warn(
-                    "[Pipeline/SteadyStateCheck]{0} DUPLICATE detected: {1} item(s) at '{2}' " +
+                    "[ManageComingSoon][Pipeline/SteadyStateCheck]{0} DUPLICATE detected: {1} item(s) at '{2}' " +
                     "(InternalIds: [{3}]); original InternalId={4} is {5}. Advanced mode SaveItem " +
                     "successfully persisted the original row's new path/parent, but the recursive " +
                     "folder-validate scan subsequently re-derived a Guid from the NEW path and " +
@@ -1430,7 +1430,7 @@ namespace ManageComingSoon.Services
             else if (ctx.MoveRequested && !identityPreserved && allAtPath.Length == 1)
             {
                 this.logger.Warn(
-                    "[Pipeline/SteadyStateCheck]{0} Identity NOT preserved: item at '{1}' has " +
+                    "[ManageComingSoon][Pipeline/SteadyStateCheck]{0} Identity NOT preserved: item at '{1}' has " +
                     "InternalId={2}, expected {3}. The move succeeded, but watch state/userdata on " +
                     "the original row was NOT carried over.",
                     ctx.LogContext, expectedPath,
@@ -1439,7 +1439,7 @@ namespace ManageComingSoon.Services
             }
 
             this.logger.Info(
-                "[Pipeline/SteadyStateCheck]{0} identity preserved={1}, duplicate detected={2}.",
+                "[ManageComingSoon][Pipeline/SteadyStateCheck]{0} identity preserved={1}, duplicate detected={2}.",
                 ctx.LogContext, identityPreserved, duplicateDetected);
 
             return new SteadyStateResult
@@ -1478,7 +1478,7 @@ namespace ManageComingSoon.Services
         private MakeLiveResult Fail(MoveContext ctx, MakeLiveStage stage, string reason,
             bool isHardStop = false)
         {
-            this.logger.Warn("[Pipeline/{0}]{1} FAILED{2}: {3}",
+            this.logger.Warn("[ManageComingSoon][Pipeline/{0}]{1} FAILED{2}: {3}",
                 stage, ctx.LogContext,
                 isHardStop ? " [HARD STOP]" : string.Empty,
                 reason);
@@ -1512,7 +1512,7 @@ namespace ManageComingSoon.Services
             }
             catch (Exception ex)
             {
-                this.logger.Warn("[Pipeline/DiskSpaceCheck]{0} Could not measure source folder size: {1}",
+                this.logger.Warn("[ManageComingSoon][Pipeline/DiskSpaceCheck]{0} Could not measure source folder size: {1}",
                     ctx.LogContext, ex.Message);
                 return false;
             }
@@ -1524,7 +1524,7 @@ namespace ManageComingSoon.Services
             }
             catch (Exception ex)
             {
-                this.logger.Warn("[Pipeline/DiskSpaceCheck]{0} Could not read free space on '{1}': {2}",
+                this.logger.Warn("[ManageComingSoon][Pipeline/DiskSpaceCheck]{0} Could not read free space on '{1}': {2}",
                     ctx.LogContext, dstRoot, ex.Message);
                 return false;
             }
@@ -1532,14 +1532,14 @@ namespace ManageComingSoon.Services
             if (available < required)
             {
                 this.logger.Warn(
-                    "[Pipeline/DiskSpaceCheck]{0} Insufficient space: need {1:N0} bytes, " +
+                    "[ManageComingSoon][Pipeline/DiskSpaceCheck]{0} Insufficient space: need {1:N0} bytes, " +
                     "{2:N0} available on '{3}'.",
                     ctx.LogContext, required, available, dstRoot);
                 return false;
             }
 
             this.logger.Info(
-                "[Pipeline/DiskSpaceCheck]{0} Space OK: need {1:N0} bytes, {2:N0} available on '{3}'.",
+                "[ManageComingSoon][Pipeline/DiskSpaceCheck]{0} Space OK: need {1:N0} bytes, {2:N0} available on '{3}'.",
                 ctx.LogContext, required, available, dstRoot);
             return true;
         }

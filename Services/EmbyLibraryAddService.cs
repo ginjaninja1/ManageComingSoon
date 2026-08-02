@@ -194,7 +194,7 @@ namespace ManageComingSoon.Services
                 : safeName + GetStubExtension(customStubPath);
             string stubFile = Path.Combine(folderPath, stubName);
 
-            this.logger.Info("[AddPipeline/{0}] ===== START ===== folder={1}",
+            this.logger.Info("[ManageComingSoon][AddPipeline/{0}] ===== START ===== folder={1}",
                 mediaType.DisplayName(), folderPath);
 
             try
@@ -208,11 +208,11 @@ namespace ManageComingSoon.Services
                 {
                     this.fileSystem.CreateDirectory(folderPath);
                     await WriteStubAsync(stubFile, customStubPath).ConfigureAwait(false);
-                    this.logger.Info("[AddPipeline] Folder and stub created: {0}", folderPath);
+                    this.logger.Info("[ManageComingSoon][AddPipeline] Folder and stub created: {0}", folderPath);
                 }
                 catch (Exception ex)
                 {
-                    this.logger.ErrorException("[AddPipeline] Failed to create placeholder", ex);
+                    this.logger.ErrorException("[ManageComingSoon][AddPipeline] Failed to create placeholder", ex);
                     return FailAdd(AddComingSoonStage.WriteFiles,
                         "Failed to create folder/stub: " + ex.Message, folderPath);
                 }
@@ -220,7 +220,7 @@ namespace ManageComingSoon.Services
                 // Still required: the only mechanism that makes
                 // ComingSoonEntryPoint.OnItemAdded apply the Coming Soon tag.
                 ComingSoonEntryPoint.RegisterPendingPath(folderPath, mediaType);
-                this.logger.Info("[AddPipeline] Registered pending path for tagging: {0}", folderPath);
+                this.logger.Info("[ManageComingSoon][AddPipeline] Registered pending path for tagging: {0}", folderPath);
 
                 ReportAdd(progress, AddComingSoonStage.WriteFiles);
 
@@ -228,7 +228,7 @@ namespace ManageComingSoon.Services
                 var targetLibrary = FindCollectionFolder(targetPath);
                 if (targetLibrary == null)
                 {
-                    this.logger.Warn("[AddPipeline] Could not locate target CollectionFolder for {0}", targetPath);
+                    this.logger.Warn("[ManageComingSoon][AddPipeline] Could not locate target CollectionFolder for {0}", targetPath);
                     return FailAdd(AddComingSoonStage.RefreshTargetLibrary,
                         "Could not locate the target library.", folderPath);
                 }
@@ -256,7 +256,7 @@ namespace ManageComingSoon.Services
                 }
                 catch (Exception ex)
                 {
-                    this.logger.ErrorException("[AddPipeline] ValidationOnly refresh failed", ex);
+                    this.logger.ErrorException("[ManageComingSoon][AddPipeline] ValidationOnly refresh failed", ex);
                     return FailAdd(AddComingSoonStage.RefreshTargetLibrary,
                         "Library refresh call failed: " + ex.Message, folderPath);
                 }
@@ -316,7 +316,7 @@ namespace ManageComingSoon.Services
                 LogItemState("AddPipeline - confirmed ingested and tagged", mediaType.DisplayName(), taggedItem);
                 ReportAdd(progress, AddComingSoonStage.ConfirmIngestedAndTagged);
 
-                this.logger.Info("[AddPipeline/{0}] ===== COMPLETE ===== '{1}'",
+                this.logger.Info("[ManageComingSoon][AddPipeline/{0}] ===== COMPLETE ===== '{1}'",
                     mediaType.DisplayName(), title.Title);
                 ReportAdd(progress, AddComingSoonStage.Complete);
 
@@ -336,7 +336,7 @@ namespace ManageComingSoon.Services
                 // exception with a full stack trace, which would be misleading
                 // noise for anyone reading the server log.
                 this.logger.Info(
-                    "[AddPipeline] Pipeline for '{0}' was cancelled — superseded by a faster completion path.",
+                    "[ManageComingSoon][AddPipeline] Pipeline for '{0}' was cancelled — superseded by a faster completion path.",
                     title.Title);
                 return new AddComingSoonResult
                 {
@@ -348,7 +348,7 @@ namespace ManageComingSoon.Services
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("[AddPipeline] Unhandled exception", ex);
+                this.logger.ErrorException("[ManageComingSoon][AddPipeline] Unhandled exception", ex);
                 return FailAdd(AddComingSoonStage.Complete,
                     "Unhandled exception — see server log: " + ex.Message, folderPath);
             }
@@ -365,7 +365,7 @@ namespace ManageComingSoon.Services
 
         private AddComingSoonResult FailAdd(AddComingSoonStage stage, string reason, string folderPath)
         {
-            this.logger.Warn("[AddPipeline] FAILED at stage {0}: {1}", stage, reason);
+            this.logger.Warn("[ManageComingSoon][AddPipeline] FAILED at stage {0}: {1}", stage, reason);
             return new AddComingSoonResult
             {
                 Success = false,
@@ -403,7 +403,7 @@ namespace ManageComingSoon.Services
                             "Check the path on the Configuration tab or disable the custom video option.",
                             customStubPath));
 
-                this.logger.Info("Copying custom stub from {0}", customStubPath);
+                this.logger.Info("[ManageComingSoon][AddPipeline] Copying custom stub from {0}", customStubPath);
                 using (var src = File.OpenRead(customStubPath))
                 using (var dest = File.OpenWrite(destinationPath))
                     await src.CopyToAsync(dest).ConfigureAwait(false);
@@ -421,7 +421,7 @@ namespace ManageComingSoon.Services
                 else
                 {
                     File.WriteAllBytes(destinationPath, new byte[0]);
-                    this.logger.Warn("Embedded stub MP4 not found; using empty file.");
+                    this.logger.Warn("[ManageComingSoon][AddPipeline] Embedded stub MP4 not found; using empty file.");
                 }
             }
         }

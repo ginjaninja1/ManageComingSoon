@@ -155,7 +155,7 @@ namespace ManageComingSoon.Services
             catch (Exception ex)
             {
                 this.logger.ErrorException(
-                    "ManageComingSoon: Failed to parse TMDB movie details for {0}", ex, tmdbId);
+                    "[ManageComingSoon][Tmdb] Failed to parse TMDB movie details for {0}", ex, tmdbId);
                 return null;
             }
         }
@@ -188,7 +188,7 @@ namespace ManageComingSoon.Services
             catch (Exception ex)
             {
                 this.logger.ErrorException(
-                    "ManageComingSoon: Failed to parse TMDB credits for movie {0}", ex, tmdbId);
+                    "[ManageComingSoon][Tmdb] Failed to parse TMDB credits for movie {0}", ex, tmdbId);
                 return new List<string>();
             }
         }
@@ -224,7 +224,7 @@ namespace ManageComingSoon.Services
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("ManageComingSoon: Failed to parse TMDB search response", ex);
+                this.logger.ErrorException("[ManageComingSoon][Tmdb] Failed to parse TMDB search response", ex);
                 return new List<TmdbTitleResult>();
             }
         }
@@ -277,7 +277,7 @@ namespace ManageComingSoon.Services
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("ManageComingSoon: HTTP fetch failed for {0}", ex, url);
+                this.logger.ErrorException("[ManageComingSoon][Tmdb] HTTP fetch failed for {0}", ex, url);
                 return string.Empty;
             }
         }

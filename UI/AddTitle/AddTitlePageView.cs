@@ -69,17 +69,14 @@ namespace ManageComingSoon.UI.AddTitle
         private readonly ITaskManager taskManager;
         private readonly ILogger logger;
 
-        // Diagnostic instance identity — see RebuildTitleList's row-count log
-        // line. If more than one instanceId ever appears live in the server
-        // log at once (constructed but not yet disposed), that confirms
-        // multiple AddTitlePageView instances are broadcasting independently,
-        // which can arrive at the client out of order and look exactly like
-        // rows flickering/reappearing even though each broadcast individually
-        // carries correct data.
-        private readonly Guid instanceId = Guid.NewGuid();
-        private int broadcastSeq;
-
         private bool disposed;
+
+        // Formats the current session's username for log-line prefixing.
+        // this.User is populated by the SDK per-request/session and is not
+        // guaranteed non-null at every call site (e.g. system-triggered
+        // paths), so this always falls back to a safe placeholder rather
+        // than risking a NullReferenceException from inside a log call.
+        private string UserTag() => "[" + (this.User?.Name ?? "unknown") + "]";
 
         // Lock that serialises every actual rebuild/broadcast — ensures that
         // reading AddTitleTracker state, building ContentData, and calling
@@ -136,10 +133,6 @@ namespace ManageComingSoon.UI.AddTitle
             // not alter its state. Whatever the tracker holds is rendered as-is.
             RebuildTitleList();
             UpdateOverallStatus();
-
-            this.logger.Info(
-                "MCS-DIAG instance={0} event=constructed",
-                this.instanceId);
         }
 
         // -----------------------------------------------------------------------
@@ -165,10 +158,6 @@ namespace ManageComingSoon.UI.AddTitle
             AddTitleTask.StateChanged -= OnTrackerStateChanged;
             this.taskManager.TaskExecuting -= OnTaskExecuting;
             this.taskManager.TaskCompleted -= OnTaskCompleted;
-
-            this.logger.Info(
-                "MCS-DIAG instance={0} event=disposed",
-                this.instanceId);
         }
 
         private AddTitleUI UI => (AddTitleUI)this.ContentData;

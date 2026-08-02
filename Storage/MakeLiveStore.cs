@@ -37,7 +37,7 @@ namespace ManageComingSoon.Storage
 
             this.storeFilePath = Path.Combine(dir, "ManageComingSoon.MakeLiveList.json");
             this.logger.Debug(
-                    "makelive logger found");
+                    "[ManageComingSoon][Storage] MakeLiveStore logger initialized");
         }
 
         // -----------------------------------------------------------------------
@@ -84,7 +84,7 @@ namespace ManageComingSoon.Storage
             catch (Exception ex)
             {
                 this.logger.ErrorException(
-                    "ManageComingSoon: MakeLiveStore failed to load – returning empty list", ex);
+                    "[ManageComingSoon][Storage] MakeLiveStore failed to load – returning empty list", ex);
                 return new List<MakeLiveEntry>();
             }
         }
@@ -103,7 +103,7 @@ namespace ManageComingSoon.Storage
             catch (Exception ex)
             {
                 this.logger.ErrorException(
-                    "ManageComingSoon: MakeLiveStore failed to save", ex);
+                    "[ManageComingSoon][Storage] MakeLiveStore failed to save", ex);
             }
         }
     }

@@ -475,7 +475,7 @@ namespace ManageComingSoon.UI.AddTitle
             var entry = AddTitleTracker.Get(id);
             if (entry == null) return;
 
-            this.logger.Debug("Manual confirm (no TMDB match) for '{0}'", entry.SearchName);
+            this.logger.Debug("[ManageComingSoon][TmdbSearch]" + UserTag() + " Manual confirm (no TMDB match) for '{0}'", entry.SearchName);
 
             AddTitleTracker.SetManualConfident(id);
             CheckDestinationForEntry(id);
@@ -607,7 +607,7 @@ namespace ManageComingSoon.UI.AddTitle
             catch (Exception ex)
             {
                 this.logger.ErrorException(
-                    "FetchCastAsync failed for '{0}'", ex, candidate.Title);
+                    "[ManageComingSoon][TmdbSearch]" + UserTag() + " FetchCastAsync failed for '{0}'", ex, candidate.Title);
             }
         }
 
@@ -632,7 +632,7 @@ namespace ManageComingSoon.UI.AddTitle
 
             try
             {
-                this.logger.Debug("Searching TMDB for '{0}' year={1}",
+                this.logger.Debug("[ManageComingSoon][TmdbSearch]" + UserTag() + " Searching TMDB for '{0}' year={1}",
                     name, year.HasValue ? year.Value.ToString() : "none");
 
                 var results = await this.tmdbService
@@ -642,7 +642,7 @@ namespace ManageComingSoon.UI.AddTitle
                 if (this.cts.IsCancellationRequested) return;
 
                 this.logger.Debug(
-                    "TMDB search for '{0}' returned {1} result(s): {2}",
+                    "[ManageComingSoon][TmdbSearch]" + UserTag() + " TMDB search for '{0}' returned {1} result(s): {2}",
                     name, results.Count,
                     string.Join(" | ", results.Select(r =>
                         string.Format("{0} ({1}) [id={2}, pop={3}]",
@@ -668,7 +668,7 @@ namespace ManageComingSoon.UI.AddTitle
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("TMDB search failed for '{0}'", ex, name);
+                this.logger.ErrorException("[ManageComingSoon][TmdbSearch]" + UserTag() + " TMDB search failed for '{0}'", ex, name);
                 AddTitleTracker.SetSearchFailed(id, string.Format("Search failed: {0}", ex.Message));
             }
             RequestUiRefresh();

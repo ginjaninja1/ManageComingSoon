@@ -89,7 +89,7 @@ namespace ManageComingSoon.UI.MakeLive
                 // could still deliver the command.
                 if (IsRunActive())
                 {
-                    this.logger.Warn("ManageComingSoon: MakeLiveOne ignored — a run is already in progress.");
+                    this.logger.Warn("[ManageComingSoon][MakeLive] MakeLiveOne ignored — a run is already in progress.");
                     return Task.FromResult<IPluginUIView>(this);
                 }
 
@@ -104,7 +104,7 @@ namespace ManageComingSoon.UI.MakeLive
                 // Guard: ignore if a run is already in progress.
                 if (IsRunActive())
                 {
-                    this.logger.Warn("ManageComingSoon: MakeAllLive ignored — a run is already in progress.");
+                    this.logger.Warn("[ManageComingSoon][MakeLive] MakeAllLive ignored — a run is already in progress.");
                     return Task.FromResult<IPluginUIView>(this);
                 }
 
@@ -195,7 +195,7 @@ namespace ManageComingSoon.UI.MakeLive
             if (MakeLiveTracker.IsInFlight(folderPath))
             {
                 this.logger.Warn(
-                    "ManageComingSoon: DequeueOne ignored for '{0}' — entry is already in-flight.",
+                    "[ManageComingSoon][MakeLive] DequeueOne ignored for '{0}' — entry is already in-flight.",
                     folderPath);
                 return;
             }
@@ -268,7 +268,7 @@ namespace ManageComingSoon.UI.MakeLive
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("ManageComingSoon: Failed to load coming soon list", ex);
+                this.logger.ErrorException("[ManageComingSoon][MakeLive] Failed to load coming soon list", ex);
             }
         }
 
@@ -339,7 +339,7 @@ namespace ManageComingSoon.UI.MakeLive
             }
 
             if (blockedPaths.Count > 0)
-                this.logger.Warn("ManageComingSoon: Make Live gate blocked {0} item(s).", blockedPaths.Count);
+                this.logger.Warn("[ManageComingSoon][MakeLive] Make Live gate blocked {0} item(s).", blockedPaths.Count);
 
             if (goodPaths.Count == 0)
             {
@@ -389,18 +389,18 @@ namespace ManageComingSoon.UI.MakeLive
                 if (worker != null)
                 {
                     var _ = this.taskManager.Execute(worker, new TaskOptions());
-                    this.logger.Info("ManageComingSoon: MakeLiveTask triggered via ITaskManager.");
+                    this.logger.Info("[ManageComingSoon][MakeLive] MakeLiveTask triggered via ITaskManager.");
                 }
                 else
                 {
-                    this.logger.Warn("ManageComingSoon: Could not find MakeLiveTask in ITaskManager.");
+                    this.logger.Warn("[ManageComingSoon][MakeLive] Could not find MakeLiveTask in ITaskManager.");
                     SetOverallStatus("Failed to start make-live task – see server log.", ItemStatus.Failed);
                     RaiseUIViewInfoChanged();
                 }
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("ManageComingSoon: Failed to trigger MakeLiveTask", ex);
+                this.logger.ErrorException("[ManageComingSoon][MakeLive] Failed to trigger MakeLiveTask", ex);
                 SetOverallStatus("Failed to start make-live task – see server log.", ItemStatus.Failed);
                 RaiseUIViewInfoChanged();
             }
