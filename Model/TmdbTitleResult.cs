@@ -9,7 +9,7 @@ namespace ManageComingSoon.Model
     // stripping underscores, so release_date -> ReleaseDate etc.
     // We add [DataMember(Name=...)] as an explicit fallback hint.
     [DataContract]
-    public class TmdbMovieResult
+    public class TmdbTitleResult
     {
         public ComingSoonMediaType MediaType { get; set; }
         [DataMember(Name = "id")]

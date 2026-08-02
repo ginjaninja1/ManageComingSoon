@@ -1,8 +1,8 @@
-// ManageComingSoon - Add Movie Page View [Commands]
+// ManageComingSoon - Add Title Page View [Commands]
 // RunCommand dispatch table + every Handle*/RunSearchAsync/FetchCastAsync
-// method it routes to. See AddMoviePageView.cs for the full file map.
+// method it routes to. See AddTitlePageView.cs for the full file map.
 
-namespace ManageComingSoon.UI.AddMovie
+namespace ManageComingSoon.UI.AddTitle
 {
     using System;
     using System.Collections.Generic;
@@ -22,7 +22,7 @@ namespace ManageComingSoon.UI.AddMovie
     using MediaBrowser.Model.Plugins.UI.Views;
     using MediaBrowser.Model.Tasks;
 
-    internal partial class AddMoviePageView : PluginPageView, IDisposable
+    internal partial class AddTitlePageView : PluginPageView, IDisposable
     {
         private ComingSoonMediaType SelectedMediaType
             => string.Equals(UI.MediaType, "TvShow", StringComparison.OrdinalIgnoreCase)
@@ -139,17 +139,17 @@ namespace ManageComingSoon.UI.AddMovie
         // dozens of simultaneous TMDB searches.
         private const int MaxBulkEntries = 25;
 
-        private sealed class BulkMovieEntry
+        private sealed class BulkTitleEntry
         {
             public string Name;
             public int? Year;
         }
 
-        // Splits the Movie Name field on '|' into individual movies, then each
-        // movie on ';' into name + optional year.
-        private static List<BulkMovieEntry> ParseBulkMovieInput(string raw)
+        // Splits the Title field on '|' into individual titles, then each
+        // title on ';' into name + optional year.
+        private static List<BulkTitleEntry> ParseBulkTitleInput(string raw)
         {
-            var result = new List<BulkMovieEntry>();
+            var result = new List<BulkTitleEntry>();
             if (string.IsNullOrWhiteSpace(raw)) return result;
 
             foreach (var rawSegment in raw.Split('|'))
@@ -169,7 +169,7 @@ namespace ManageComingSoon.UI.AddMovie
                 string name = namePart.Trim();
                 if (string.IsNullOrEmpty(name)) continue;
 
-                result.Add(new BulkMovieEntry { Name = name, Year = ParseYear(yearPart) });
+                result.Add(new BulkTitleEntry { Name = name, Year = ParseYear(yearPart) });
             }
 
             return result;
@@ -200,14 +200,14 @@ namespace ManageComingSoon.UI.AddMovie
                 return;
             }
 
-            string rawName = ui.MovieName ?? string.Empty;
+            string rawName = ui.TitleName ?? string.Empty;
             string rawYear = ui.ReleaseYear;
 
-            var entries = ParseBulkMovieInput(rawName);
+            var entries = ParseBulkTitleInput(rawName);
 
             if (entries.Count == 0)
             {
-                SetOverallStatus("Please enter a movie name.", ItemStatus.Failed);
+                SetOverallStatus("Please enter a title.", ItemStatus.Failed);
                 RequestUiRefresh(preserveStatus: true);
                 return;
             }
@@ -227,12 +227,12 @@ namespace ManageComingSoon.UI.AddMovie
             if (entries.Count == 1 && entries[0].Year == null)
                 entries[0].Year = ParseYear(rawYear);
 
-            ui.MovieName = string.Empty;
+            ui.TitleName = string.Empty;
             ui.ReleaseYear = string.Empty;
 
-            var addedEntries = new List<AddMovieEntry>(entries.Count);
+            var addedEntries = new List<AddTitleEntry>(entries.Count);
             foreach (var item in entries)
-                addedEntries.Add(AddMovieTracker.Add(item.Name, item.Year, SelectedMediaType));
+                addedEntries.Add(AddTitleTracker.Add(item.Name, item.Year, SelectedMediaType));
 
             RequestUiRefresh();
 
@@ -249,14 +249,14 @@ namespace ManageComingSoon.UI.AddMovie
         {
             var ui = UI;
 
-            string rawName = ui.MovieName ?? string.Empty;
+            string rawName = ui.TitleName ?? string.Empty;
             string rawYear = ui.ReleaseYear;
 
-            var entries = ParseBulkMovieInput(rawName);
+            var entries = ParseBulkTitleInput(rawName);
 
             if (entries.Count == 0)
             {
-                SetOverallStatus("Please enter a movie name.", ItemStatus.Failed);
+                SetOverallStatus("Please enter a title.", ItemStatus.Failed);
                 RequestUiRefresh(preserveStatus: true);
                 return;
             }
@@ -276,12 +276,12 @@ namespace ManageComingSoon.UI.AddMovie
             if (entries.Count == 1 && entries[0].Year == null)
                 entries[0].Year = ParseYear(rawYear);
 
-            ui.MovieName = string.Empty;
+            ui.TitleName = string.Empty;
             ui.ReleaseYear = string.Empty;
 
             foreach (var item in entries)
             {
-                var entry = AddMovieTracker.AddManual(item.Name, item.Year, SelectedMediaType);
+                var entry = AddTitleTracker.AddManual(item.Name, item.Year, SelectedMediaType);
                 CheckDestinationForEntry(entry.Id);
             }
 
@@ -289,41 +289,41 @@ namespace ManageComingSoon.UI.AddMovie
         }
 
         // -----------------------------------------------------------------------
-        // Add All — enqueues selected Confident entries then fires AddMovieTask
+        // Add All — enqueues selected Confident entries then fires AddTitleTask
         // -----------------------------------------------------------------------
 
         private void HandleAddAll()
         {
             // Re-check destinations for all Confident rows before transitioning.
-            foreach (var e in AddMovieTracker.GetAllSorted()
-                .Where(e => e.State == AddMovieState.Confident))
+            foreach (var e in AddTitleTracker.GetAllSorted()
+                .Where(e => e.State == AddTitleState.Confident))
                 CheckDestinationForEntry(e.Id);
 
             // Transition all currently-selected Confident entries into the queue
             // and record their destination path immediately so queued rows can
             // display it without waiting for the task to start.
-            var toQueue = AddMovieTracker.GetAllSorted()
-                .Where(e => e.State == AddMovieState.Confident && e.IncludedInBulkAdd)
+            var toQueue = AddTitleTracker.GetAllSorted()
+                .Where(e => e.State == AddTitleState.Confident && e.IncludedInBulkAdd)
                 .ToArray();
 
             foreach (var e in toQueue)
             {
                 string targetPath = ConfigurationPageView.PathFromKey(
                     GetComingSoonTargetKey(e.MediaType));
-                AddMovieTracker.SetQueued(e.Id);
+                AddTitleTracker.SetQueued(e.Id);
                 if (!string.IsNullOrEmpty(targetPath))
                 {
                     string folderName = EmbyLibrarySharedService.BuildComingSoonFolderName(
                         e.ConfirmedTitle, e.ConfirmedYear);
-                    AddMovieTracker.RecordFolderPath(
+                    AddTitleTracker.RecordFolderPath(
                         e.Id, System.IO.Path.Combine(targetPath, folderName));
                 }
             }
 
             // If there are queued entries (newly queued or surviving from a prior
             // navigation) fire the task.
-            var queued = AddMovieTracker.GetAllSorted()
-                .Where(e => e.State == AddMovieState.Queued)
+            var queued = AddTitleTracker.GetAllSorted()
+                .Where(e => e.State == AddTitleState.Queued)
                 .ToArray();
 
             if (queued.Length == 0)
@@ -338,7 +338,7 @@ namespace ManageComingSoon.UI.AddMovie
             // ITaskManager enforces that only one instance runs at a time.
             this.taskManager.Execute(
                 this.taskManager.ScheduledTasks.FirstOrDefault(
-                    t => t.ScheduledTask is AddMovieTask),
+                    t => t.ScheduledTask is AddTitleTask),
                 new TaskOptions());
         }
 
@@ -349,15 +349,15 @@ namespace ManageComingSoon.UI.AddMovie
 
         private void HandleAddOne(string id)
         {
-            var entry = AddMovieTracker.Get(id);
+            var entry = AddTitleTracker.Get(id);
             if (entry == null) return;
-            if (entry.State != AddMovieState.Confident
-                && entry.State != AddMovieState.AddFailed)
+            if (entry.State != AddTitleState.Confident
+                && entry.State != AddTitleState.AddFailed)
                 return;
 
             // Gate: re-check destination immediately before queuing
             CheckDestinationForEntry(id);
-            entry = AddMovieTracker.Get(id);
+            entry = AddTitleTracker.Get(id);
             if (entry == null || entry.IsAddBlocked)
             {
                 RequestUiRefresh();
@@ -369,26 +369,26 @@ namespace ManageComingSoon.UI.AddMovie
 
             if (string.IsNullOrEmpty(targetPath))
             {
-                AddMovieTracker.SetAddFailed(id,
+                AddTitleTracker.SetAddFailed(id,
                     "No target library path configured. Please set one on the Configuration tab.");
                 RequestUiRefresh();
                 return;
             }
 
-            AddMovieTracker.SetQueued(id);
+            AddTitleTracker.SetQueued(id);
 
             // Record destination path immediately so the queued row can display
             // it without waiting for the task to start.
             string folderName = EmbyLibrarySharedService.BuildComingSoonFolderName(
                 entry.ConfirmedTitle, entry.ConfirmedYear);
-            AddMovieTracker.RecordFolderPath(
+            AddTitleTracker.RecordFolderPath(
                 id, System.IO.Path.Combine(targetPath, folderName));
 
             RequestUiRefresh();
 
             this.taskManager.Execute(
                 this.taskManager.ScheduledTasks.FirstOrDefault(
-                    t => t.ScheduledTask is AddMovieTask),
+                    t => t.ScheduledTask is AddTitleTask),
                 new TaskOptions());
         }
 
@@ -398,10 +398,10 @@ namespace ManageComingSoon.UI.AddMovie
 
         private void HandleRemove(string id)
         {
-            var entry = AddMovieTracker.Get(id);
+            var entry = AddTitleTracker.Get(id);
             if (entry == null) return;
 
-            if (entry.State == AddMovieState.Adding)
+            if (entry.State == AddTitleState.Adding)
             {
                 SetOverallStatus(
                     "Cannot remove a row while it is being added to the library.",
@@ -411,20 +411,20 @@ namespace ManageComingSoon.UI.AddMovie
             }
 
             expandedCandidates.Remove(id);
-            AddMovieTracker.Remove(id);
+            AddTitleTracker.Remove(id);
             RequestUiRefresh();
         }
 
         private void HandleClearCompleted()
         {
-            var completed = AddMovieTracker.GetAllSorted()
-                .Where(e => e.State == AddMovieState.Added)
+            var completed = AddTitleTracker.GetAllSorted()
+                .Where(e => e.State == AddTitleState.Added)
                 .ToArray();
 
             foreach (var entry in completed)
             {
                 expandedCandidates.Remove(entry.Id);
-                AddMovieTracker.Remove(entry.Id);
+                AddTitleTracker.Remove(entry.Id);
             }
 
             RequestUiRefresh();
@@ -432,13 +432,13 @@ namespace ManageComingSoon.UI.AddMovie
 
         private void HandleToggleBulk(string id)
         {
-            var entry = AddMovieTracker.Get(id);
+            var entry = AddTitleTracker.Get(id);
             if (entry == null) return;
 
             // Toggling off: always allowed.
             if (entry.IncludedInBulkAdd)
             {
-                AddMovieTracker.SetIncludedInBulkAdd(id, false);
+                AddTitleTracker.SetIncludedInBulkAdd(id, false);
                 RequestUiRefresh();
                 return;
             }
@@ -446,7 +446,7 @@ namespace ManageComingSoon.UI.AddMovie
             // Toggling on: re-run the destination check first.
             // The user may have resolved the conflict externally since confirmation.
             CheckDestinationForEntry(id);
-            entry = AddMovieTracker.Get(id);
+            entry = AddTitleTracker.Get(id);
             if (entry == null) return;
 
             if (entry.IsAddBlocked)
@@ -462,7 +462,7 @@ namespace ManageComingSoon.UI.AddMovie
                 return;
             }
 
-            AddMovieTracker.SetIncludedInBulkAdd(id, true);
+            AddTitleTracker.SetIncludedInBulkAdd(id, true);
             RequestUiRefresh();
         }
 
@@ -472,12 +472,12 @@ namespace ManageComingSoon.UI.AddMovie
 
         private void HandleManual(string id)
         {
-            var entry = AddMovieTracker.Get(id);
+            var entry = AddTitleTracker.Get(id);
             if (entry == null) return;
 
             this.logger.Debug("Manual confirm (no TMDB match) for '{0}'", entry.SearchName);
 
-            AddMovieTracker.SetManualConfident(id);
+            AddTitleTracker.SetManualConfident(id);
             CheckDestinationForEntry(id);
 
             RequestUiRefresh();
@@ -489,10 +489,10 @@ namespace ManageComingSoon.UI.AddMovie
 
         private void HandleRetry(string id)
         {
-            var entry = AddMovieTracker.Get(id);
+            var entry = AddTitleTracker.Get(id);
             if (entry == null) return;
 
-            if (entry.State == AddMovieState.AddFailed)
+            if (entry.State == AddTitleState.AddFailed)
             {
                 // Re-add to queue and fire the task for a single-item retry
                 HandleAddOne(id);
@@ -500,7 +500,7 @@ namespace ManageComingSoon.UI.AddMovie
             }
 
             // Re-search (NoResults / SearchFailed / MultipleMatches)
-            AddMovieTracker.SetSearching(id);
+            AddTitleTracker.SetSearching(id);
             RequestUiRefresh();
             Task.Run(
                 () => RunSearchAsync(id, entry.SearchName, entry.SearchYear),
@@ -522,12 +522,12 @@ namespace ManageComingSoon.UI.AddMovie
             int index;
             if (!int.TryParse(indexStr, out index)) return;
 
-            var entry = AddMovieTracker.Get(id);
+            var entry = AddTitleTracker.Get(id);
             if (entry == null) return;
             if (index < 0 || index >= entry.Candidates.Count) return;
 
             var chosen = entry.Candidates[index];
-            var match = new ManageComingSoon.Model.TmdbMovieResult
+            var match = new ManageComingSoon.Model.TmdbTitleResult
             {
                 MediaType = entry.MediaType,
                 Id = chosen.TmdbId,
@@ -538,7 +538,7 @@ namespace ManageComingSoon.UI.AddMovie
                 Popularity = chosen.Popularity,
             };
 
-            AddMovieTracker.SetConfident(id, match);
+            AddTitleTracker.SetConfident(id, match);
             CheckDestinationForEntry(id);
 
             RequestUiRefresh();
@@ -560,7 +560,7 @@ namespace ManageComingSoon.UI.AddMovie
             int index;
             if (!int.TryParse(indexStr, out index)) return;
 
-            var entry = AddMovieTracker.Get(id);
+            var entry = AddTitleTracker.Get(id);
             if (entry == null) return;
             if (index < 0 || index >= entry.Candidates.Count) return;
 
@@ -586,7 +586,7 @@ namespace ManageComingSoon.UI.AddMovie
         }
 
         private async Task FetchCastAsync(string entryId, int candidateIndex,
-            AddMovieCandidate candidate)
+            AddTitleCandidate candidate)
         {
             if (this.cts.IsCancellationRequested) return;
             var cfg = this.plugin.Configuration;
@@ -600,7 +600,7 @@ namespace ManageComingSoon.UI.AddMovie
 
                 if (this.cts.IsCancellationRequested) return;
 
-                AddMovieTracker.SetCandidateCast(entryId, candidateIndex, cast);
+                AddTitleTracker.SetCandidateCast(entryId, candidateIndex, cast);
                 RequestUiRefresh();
             }
             catch (OperationCanceledException) { }
@@ -618,13 +618,13 @@ namespace ManageComingSoon.UI.AddMovie
         private async Task RunSearchAsync(string id, string name, int? year)
         {
             if (this.cts.IsCancellationRequested) return;
-            var entry = AddMovieTracker.Get(id);
+            var entry = AddTitleTracker.Get(id);
             if (entry == null) return;
             var cfg = this.plugin.Configuration;
 
             if (string.IsNullOrWhiteSpace(cfg.TmdbApiKey))
             {
-                AddMovieTracker.SetSearchFailed(id,
+                AddTitleTracker.SetSearchFailed(id,
                     "TMDB API key not configured. Please set it on the Configuration tab.");
                 RequestUiRefresh();
                 return;
@@ -649,27 +649,27 @@ namespace ManageComingSoon.UI.AddMovie
                             r.Title, r.ReleaseYear, r.Id, r.Popularity))));
 
                 if (results.Count == 0)
-                    AddMovieTracker.SetNoResults(id);
+                    AddTitleTracker.SetNoResults(id);
                 else if (this.tmdbService.IsConfidentMatch(results, name, year))
                 {
-                    AddMovieTracker.SetConfident(id, results[0]);
+                    AddTitleTracker.SetConfident(id, results[0]);
                     CheckDestinationForEntry(id);
                 }
                 else
-                    AddMovieTracker.SetMultipleMatches(id, results);
+                    AddTitleTracker.SetMultipleMatches(id, results);
             }
             catch (OperationCanceledException)
             {
                 // Page was navigated away — write a terminal state so the entry
                 // does not remain stuck in Searching. The user can re-search on return.
-                AddMovieTracker.SetSearchFailed(id, "Search was cancelled — click Retry to search again.");
+                AddTitleTracker.SetSearchFailed(id, "Search was cancelled — click Retry to search again.");
                 RequestUiRefresh();
                 return;
             }
             catch (Exception ex)
             {
                 this.logger.ErrorException("TMDB search failed for '{0}'", ex, name);
-                AddMovieTracker.SetSearchFailed(id, string.Format("Search failed: {0}", ex.Message));
+                AddTitleTracker.SetSearchFailed(id, string.Format("Search failed: {0}", ex.Message));
             }
             RequestUiRefresh();
         }

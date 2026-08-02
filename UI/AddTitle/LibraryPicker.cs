@@ -1,6 +1,6 @@
 // ManageComingSoon - Library Path Picker (nested list, SDK ChildCollections pattern)
 
-namespace ManageComingSoon.UI.AddMovie
+namespace ManageComingSoon.UI.AddTitle
 {
     using System.Collections;
     using System.Collections.Generic;

@@ -1,7 +1,7 @@
-﻿// ManageComingSoon - Make Live Store
+// ManageComingSoon - Make Live Store
 // JSON-backed persistence for the Make Live tracker (active + history rows).
 // Stores a List<MakeLiveEntry> as a single file in Emby's plugin data folder.
-// Mirrors the AddMovieStore pattern exactly.
+// Mirrors the AddTitleStore pattern exactly.
 
 namespace ManageComingSoon.Storage
 {

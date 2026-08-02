@@ -3,36 +3,36 @@
 //
 // This class is split across partial-class files by concern:
 //
-//   AddMoviePageView.cs            - THIS FILE. Class skeleton: constants,
+//   AddTitlePageView.cs            - THIS FILE. Class skeleton: constants,
 //                                     fields, ctor, Dispose, UI accessor,
 //                                     ITaskManager event handlers, and
-//                                     AddMovieTask event subscriptions.
+//                                     AddTitleTask event subscriptions.
 //
-//   AddMoviePageView.Commands.cs   - RunCommand dispatch table and every
+//   AddTitlePageView.Commands.cs   - RunCommand dispatch table and every
 //                                     Handle*/RunSearchAsync/FetchCastAsync
 //                                     method it routes to.
 //
-//   AddMoviePageView.Conflict.cs   - CheckDestinationForEntry: point-in-time
+//   AddTitlePageView.Conflict.cs   - CheckDestinationForEntry: point-in-time
 //                                     destination check called at confirmation
 //                                     and on toggle-on. No polling.
 //
-//   AddMoviePageView.Rebuild.cs    - RefreshAddButtonState, RebuildMovieList,
+//   AddTitlePageView.Rebuild.cs    - RefreshAddButtonState, RebuildTitleList,
 //                                     and the overall status footer
 //                                     (UpdateOverallStatus/SetOverallStatus).
 //
-//   AddMoviePageView.RowBuilders.cs - BuildMovieRow and all the small
+//   AddTitlePageView.RowBuilders.cs - BuildTitleRow and all the small
 //                                     State → (icon/text/percent/button)
 //                                     mapping helpers.
 //
 // UI refresh model — event-driven, with coalesced broadcasts:
-//   AddMovieTracker.[UI] methods fire OnStateChanged after every mutation.
-//   AddMovieTask.StateChanged relays this to OnTrackerStateChanged here,
+//   AddTitleTracker.[UI] methods fire OnStateChanged after every mutation.
+//   AddTitleTask.StateChanged relays this to OnTrackerStateChanged here,
 //   which requests a UI refresh. Multiple fast mutations collapse into one
 //   ContentData broadcast, so the Emby client receives fewer transient list
 //   shapes while still rendering the latest tracker state.
 //   OnTaskCompleted handles task-level status footer updates separately.
 
-namespace ManageComingSoon.UI.AddMovie
+namespace ManageComingSoon.UI.AddTitle
 {
     using System;
     using System.Collections.Generic;
@@ -53,7 +53,7 @@ namespace ManageComingSoon.UI.AddMovie
     using MediaBrowser.Model.Plugins.UI.Views;
     using MediaBrowser.Model.Tasks;
 
-    internal partial class AddMoviePageView : PluginPageView, IDisposable
+    internal partial class AddTitlePageView : PluginPageView, IDisposable
     {
         // All live page instances receive tracker broadcasts. Keep the tab's
         // most recently submitted selector value shared so an older instance
@@ -69,10 +69,10 @@ namespace ManageComingSoon.UI.AddMovie
         private readonly ITaskManager taskManager;
         private readonly ILogger logger;
 
-        // Diagnostic instance identity — see RebuildMovieList's row-count log
+        // Diagnostic instance identity — see RebuildTitleList's row-count log
         // line. If more than one instanceId ever appears live in the server
         // log at once (constructed but not yet disposed), that confirms
-        // multiple AddMoviePageView instances are broadcasting independently,
+        // multiple AddTitlePageView instances are broadcasting independently,
         // which can arrive at the client out of order and look exactly like
         // rows flickering/reappearing even though each broadcast individually
         // carries correct data.
@@ -82,7 +82,7 @@ namespace ManageComingSoon.UI.AddMovie
         private bool disposed;
 
         // Lock that serialises every actual rebuild/broadcast — ensures that
-        // reading AddMovieTracker state, building ContentData, and calling
+        // reading AddTitleTracker state, building ContentData, and calling
         // RaiseUIViewInfoChanged() are never interleaved with each other across
         // the tracker StateChanged thread and any command-handler thread that
         // also requests a UI refresh. Without this, a background-task mutation
@@ -103,7 +103,7 @@ namespace ManageComingSoon.UI.AddMovie
         private readonly HashSet<string> expandedInfo =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        public AddMoviePageView(
+        public AddTitlePageView(
             PluginInfo pluginInfo,
             ManageComingSoonPlugin plugin,
             TmdbService tmdbService,
@@ -118,23 +118,23 @@ namespace ManageComingSoon.UI.AddMovie
             this.taskManager = taskManager;
             this.logger = logger;
 
-            this.ContentData = new AddMovieUI();
+            this.ContentData = new AddTitleUI();
             UI.MediaType = selectedMediaTypeValue;
             this.ShowSave = false;
 
             this.taskManager.TaskExecuting += OnTaskExecuting;
             this.taskManager.TaskCompleted += OnTaskCompleted;
 
-            // Single subscription — AddMovieTracker fires OnStateChanged from every
-            // [UI] mutation method; AddMovieTask.StateChanged relays it here.
+            // Single subscription — AddTitleTracker fires OnStateChanged from every
+            // [UI] mutation method; AddTitleTask.StateChanged relays it here.
             // No poll timer, no pairing of tracker calls with event raises.
-            AddMovieTask.StateChanged += OnTrackerStateChanged;
+            AddTitleTask.StateChanged += OnTrackerStateChanged;
 
             RefreshAddButtonState();
             // Initial build — no broadcast needed (no client connected yet).
             // The tracker is the single point of truth: page navigation does
             // not alter its state. Whatever the tracker holds is rendered as-is.
-            RebuildMovieList();
+            RebuildTitleList();
             UpdateOverallStatus();
 
             this.logger.Info(
@@ -162,7 +162,7 @@ namespace ManageComingSoon.UI.AddMovie
                 this.uiRefreshScheduled = false;
                 this.preserveStatusOnNextRefresh = false;
             }
-            AddMovieTask.StateChanged -= OnTrackerStateChanged;
+            AddTitleTask.StateChanged -= OnTrackerStateChanged;
             this.taskManager.TaskExecuting -= OnTaskExecuting;
             this.taskManager.TaskCompleted -= OnTaskCompleted;
 
@@ -171,7 +171,7 @@ namespace ManageComingSoon.UI.AddMovie
                 this.instanceId);
         }
 
-        private AddMovieUI UI => (AddMovieUI)this.ContentData;
+        private AddTitleUI UI => (AddTitleUI)this.ContentData;
 
         // -----------------------------------------------------------------------
         // RequestUiRefresh — single choke-point for all UI refresh requests.
@@ -226,7 +226,7 @@ namespace ManageComingSoon.UI.AddMovie
                 if (this.disposed) return;
                 UI.MediaType = selectedMediaTypeValue;
                 RefreshAddButtonState();
-                RebuildMovieList();
+                RebuildTitleList();
                 if (!preserveStatus)
                     UpdateOverallStatus();
                 RaiseUIViewInfoChanged();
@@ -234,8 +234,8 @@ namespace ManageComingSoon.UI.AddMovie
         }
 
         // -----------------------------------------------------------------------
-        // Tracker state-change handler — called whenever AddMovieTracker fires
-        // OnStateChanged via AddMovieTask.StateChanged. Covers all [UI] mutations:
+        // Tracker state-change handler — called whenever AddTitleTracker fires
+        // OnStateChanged via AddTitleTask.StateChanged. Covers all [UI] mutations:
         // search results, queue transitions, pipeline progress, completion, failure.
         // -----------------------------------------------------------------------
 
@@ -252,17 +252,17 @@ namespace ManageComingSoon.UI.AddMovie
         private void OnTaskExecuting(object sender,
             GenericEventArgs<IScheduledTaskWorker> e)
         {
-            // No action needed — AddMovieTask.ItemStarted fires immediately when
+            // No action needed — AddTitleTask.ItemStarted fires immediately when
             // the first item begins, which triggers the first requested refresh.
             // Keeping this handler for future use or logging if needed.
             if (this.disposed) return;
-            if (!(e.Argument.ScheduledTask is AddMovieTask)) return;
+            if (!(e.Argument.ScheduledTask is AddTitleTask)) return;
         }
 
         private void OnTaskCompleted(object sender, TaskCompletionEventArgs e)
         {
             if (this.disposed) return;
-            if (!(e.Task.ScheduledTask is AddMovieTask)) return;
+            if (!(e.Task.ScheduledTask is AddTitleTask)) return;
 
             bool succeeded = e.Result.Status == TaskCompletionStatus.Completed;
             SetOverallStatus(
@@ -278,10 +278,10 @@ namespace ManageComingSoon.UI.AddMovie
         // Task worker lookup
         // -----------------------------------------------------------------------
 
-        private IScheduledTaskWorker GetAddMovieWorker()
+        private IScheduledTaskWorker GetAddTitleWorker()
         {
             return this.taskManager.ScheduledTasks
-                .FirstOrDefault(t => t.ScheduledTask is AddMovieTask);
+                .FirstOrDefault(t => t.ScheduledTask is AddTitleTask);
         }
     }
 }

@@ -86,7 +86,7 @@ namespace ManageComingSoon
                             this.appHost, libraryManager, itemRepository,
                             providerManager, fileSystem, libraryMonitor, this.logger);
 
-                        AddMovieTask.SetDependencies(
+                        AddTitleTask.SetDependencies(
                             this.addServiceInstance,
                             this.logger,
                             () => this.Configuration.EmbyApiKey,

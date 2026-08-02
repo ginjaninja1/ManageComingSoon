@@ -1,4 +1,4 @@
-﻿// ManageComingSoon - Make Live Page View [Polling]
+// ManageComingSoon - Make Live Page View [Polling]
 // StartPollTimer/StopPollTimer/PollProgress/BuildPollSignature.
 // See MakeLivePageView.cs for the full file map.
 
@@ -25,7 +25,7 @@ namespace ManageComingSoon.UI.MakeLive
     {
         // -----------------------------------------------------------------------
         // Poll timer — 1s tick; rebuilds the movie list (including tracker rows)
-        // on every tick where something actually changed, mirroring AddMoviePageView.
+        // on every tick where something actually changed, mirroring AddTitlePageView.
         // -----------------------------------------------------------------------
 
         private void StartPollTimer()
@@ -41,7 +41,7 @@ namespace ManageComingSoon.UI.MakeLive
         {
             var t = Interlocked.Exchange(ref this.pollTimer, null);
             if (t == null) return;
-            // Plain Dispose() — see AddMoviePageView.Polling.cs for why
+            // Plain Dispose() — see AddTitlePageView.Polling.cs for why
             // Dispose(WaitHandle) is deliberately avoided.
             t.Dispose();
         }
@@ -58,14 +58,14 @@ namespace ManageComingSoon.UI.MakeLive
 
                 // Only push a UI refresh when something in the tracker changed
                 // since the last tick — avoids the "bouncing" input-field problem
-                // that AddMoviePageView's OnPollTick comment explains in detail.
+                // that AddTitlePageView's OnPollTick comment explains in detail.
                 string signature = BuildPollSignature(taskPct);
                 if (signature != this.lastPolledSignature)
                 {
                     this.lastPolledSignature = signature;
-                    // Pass taskPct into RebuildMovieList so UpdateOverallStatus
+                    // Pass taskPct into RebuildTitleList so UpdateOverallStatus
                     // can show the live percentage in the status banner.
-                    RebuildMovieList(taskPct);
+                    RebuildTitleList(taskPct);
                     RaiseUIViewInfoChanged();
                 }
 

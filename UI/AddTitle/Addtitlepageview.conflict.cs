@@ -1,4 +1,4 @@
-﻿// ManageComingSoon - Add Movie Page View [Conflict]
+// ManageComingSoon - Add Movie Page View [Conflict]
 // Point-in-time destination conflict check.
 //
 // Called at two moments only — no polling:
@@ -18,7 +18,7 @@
 // IsAddBlocked is false by definition for any state other than Confident,
 // so the check can never fire at the wrong time.
 
-namespace ManageComingSoon.UI.AddMovie
+namespace ManageComingSoon.UI.AddTitle
 {
     using System;
     using System.IO;
@@ -37,7 +37,7 @@ namespace ManageComingSoon.UI.AddMovie
     using MediaBrowser.Model.Plugins;
     using MediaBrowser.Model.Plugins.UI.Views;
 
-    internal partial class AddMoviePageView : PluginPageView, IDisposable
+    internal partial class AddTitlePageView : PluginPageView, IDisposable
     {
         /// <summary>
         /// Point-in-time destination conflict check for a single Confident entry.
@@ -56,8 +56,8 @@ namespace ManageComingSoon.UI.AddMovie
         /// </summary>
         private bool CheckDestinationForEntry(string id)
         {
-            var entry = AddMovieTracker.Get(id);
-            if (entry == null || entry.State != AddMovieState.Confident) return false;
+            var entry = AddTitleTracker.Get(id);
+            if (entry == null || entry.State != AddTitleState.Confident) return false;
 
             string targetPath = ConfigurationPageView.PathFromKey(
                 GetComingSoonTargetKey(entry.MediaType));
@@ -71,7 +71,7 @@ namespace ManageComingSoon.UI.AddMovie
             string reason = string.Empty;
 
             // In-list duplicate check (no disk I/O)
-            var duplicate = AddMovieTracker.FindEarlierDuplicateDestination(
+            var duplicate = AddTitleTracker.FindEarlierDuplicateDestination(
                 safeName, id, entry.CreatedAt);
 
             if (duplicate != null)
@@ -84,7 +84,7 @@ namespace ManageComingSoon.UI.AddMovie
             else
             {
                 // TMDBID library-wide check — catches cases the folder-name-based
-                // checks cannot: the same movie already Coming Soon under a
+                // checks cannot: the same title already Coming Soon under a
                 // different folder name, or already available in the main
                 // library outside the Coming Soon workflow.
                 var tmdbConflict = this.libraryService.CheckTmdbLibraryConflict(
@@ -102,7 +102,7 @@ namespace ManageComingSoon.UI.AddMovie
                         if (Directory.Exists(destFolder))
                         {
                             conflict = true;
-                            reason = "Movie already coming soon";
+                            reason = entry.MediaType.DisplayName() + " already coming soon";
                         }
                     }
                     catch (Exception ex)
@@ -117,14 +117,14 @@ namespace ManageComingSoon.UI.AddMovie
 
             if (conflict && !entry.HasDestinationConflict)
             {
-                AddMovieTracker.SetConflict(id, reason);
-                AddMovieTracker.SetIncludedInBulkAdd(id, false);
+                AddTitleTracker.SetConflict(id, reason);
+                AddTitleTracker.SetIncludedInBulkAdd(id, false);
                 return true;
             }
 
             if (!conflict && entry.HasDestinationConflict)
             {
-                AddMovieTracker.ClearConflict(id);
+                AddTitleTracker.ClearConflict(id);
                 return true;
             }
 

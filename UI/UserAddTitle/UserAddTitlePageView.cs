@@ -1,4 +1,4 @@
-﻿namespace ManageComingSoon.UI.UserAddMovie
+namespace ManageComingSoon.UI.UserAddTitle
 {
     using System;
     using System.Collections.Generic;
@@ -23,7 +23,7 @@
     /// No RaiseUIViewInfoChanged, timers, task events, detached searches or
     /// server-push assumptions are used.
     /// </summary>
-    internal sealed class UserAddMoviePageView : PluginPageView
+    internal sealed class UserAddTitlePageView : PluginPageView
     {
         private ComingSoonMediaType SelectedMediaType
             => string.Equals(UI.MediaType, "TvShow", StringComparison.OrdinalIgnoreCase)
@@ -55,7 +55,7 @@
             new HashSet<string>(StringComparer.Ordinal);
         private bool interactionStatusSet;
 
-        public UserAddMoviePageView(
+        public UserAddTitlePageView(
             PluginInfo pluginInfo,
             ManageComingSoonPlugin plugin,
             TmdbService tmdbService,
@@ -69,12 +69,12 @@
             this.libraryService = libraryService;
             this.taskManager = taskManager;
             this.logger = logger;
-            this.ContentData = new UserAddMovieUI();
+            this.ContentData = new UserAddTitleUI();
             this.ShowSave = false;
             RebuildPage();
         }
 
-        private UserAddMovieUI UI => (UserAddMovieUI)this.ContentData;
+        private UserAddTitleUI UI => (UserAddTitleUI)this.ContentData;
 
         public override async Task<IPluginUIView> RunCommand(
             string itemId,
@@ -93,7 +93,7 @@
                 else if (commandId == "RefreshStatus")
                     SyncSubmittedStates();
                 else if (commandId == "ClearCompleted")
-                    UserAddMovieTracker.ClearCompleted();
+                    UserAddTitleTracker.ClearCompleted();
                 else if (commandId != null && commandId.StartsWith("Remove_", StringComparison.Ordinal))
                     HandleRemove(commandId.Substring(7));
                 else if (commandId != null && commandId.StartsWith("ToggleBulk_", StringComparison.Ordinal))
@@ -131,7 +131,7 @@
 
         private async Task HandleAddViaTmdbAsync()
         {
-            var parsed = ParseBulkMovieInput(UI.MovieName, UI.ReleaseYear);
+            var parsed = ParseBulkTitleInput(UI.TitleName, UI.ReleaseYear);
             if (parsed.Count == 0)
             {
                 SetStatus("Please enter a title.", ItemStatus.Failed);
@@ -148,12 +148,12 @@
                 return;
             }
 
-            UI.MovieName = string.Empty;
+            UI.TitleName = string.Empty;
             UI.ReleaseYear = string.Empty;
 
-            var work = new List<Tuple<UserMovieEntry, BulkMovieEntry>>();
+            var work = new List<Tuple<UserTitleEntry, BulkTitleEntry>>();
             foreach (var item in parsed)
-                work.Add(Tuple.Create(UserAddMovieTracker.Add(item.Name, item.Year, SelectedMediaType), item));
+                work.Add(Tuple.Create(UserAddTitleTracker.Add(item.Name, item.Year, SelectedMediaType), item));
 
             var searches = work.Select(pair => SearchEntryAsync(pair.Item1, pair.Item2.Name, pair.Item2.Year));
             await Task.WhenAll(searches).ConfigureAwait(false);
@@ -161,7 +161,7 @@
 
         private void HandleAddManual()
         {
-            var parsed = ParseBulkMovieInput(UI.MovieName, UI.ReleaseYear);
+            var parsed = ParseBulkTitleInput(UI.TitleName, UI.ReleaseYear);
             if (parsed.Count == 0)
             {
                 SetStatus("Please enter a title.", ItemStatus.Failed);
@@ -175,15 +175,15 @@
 
             foreach (var item in parsed)
             {
-                var entry = UserAddMovieTracker.AddManual(item.Name, item.Year, SelectedMediaType);
+                var entry = UserAddTitleTracker.AddManual(item.Name, item.Year, SelectedMediaType);
                 CheckDestination(entry);
             }
 
-            UI.MovieName = string.Empty;
+            UI.TitleName = string.Empty;
             UI.ReleaseYear = string.Empty;
         }
 
-        private async Task SearchEntryAsync(UserMovieEntry entry, string name, int? year)
+        private async Task SearchEntryAsync(UserTitleEntry entry, string name, int? year)
         {
             try
             {
@@ -195,31 +195,31 @@
                     CancellationToken.None).ConfigureAwait(false);
 
                 entry.Candidates = results.Take(MaxExpandedCandidates)
-                    .Select(r => new UserMovieCandidate { Movie = r })
+                    .Select(r => new UserTitleCandidate { TitleResult = r })
                     .ToList();
 
                 if (entry.Candidates.Count == 0)
                 {
-                    entry.State = UserMovieState.NoResults;
+                    entry.State = UserTitleState.NoResults;
                     return;
                 }
 
                 if (this.tmdbService.IsConfidentMatch(results, name, year))
                 {
                     entry.SelectedMatch = results[0];
-                    entry.State = UserMovieState.Ready;
+                    entry.State = UserTitleState.Ready;
                     entry.IncludedInBulkAdd = true;
                     CheckDestination(entry);
                 }
                 else
                 {
-                    entry.State = UserMovieState.MultipleMatches;
+                    entry.State = UserTitleState.MultipleMatches;
                     entry.IncludedInBulkAdd = false;
                 }
             }
             catch (Exception ex)
             {
-                entry.State = UserMovieState.SearchFailed;
+                entry.State = UserTitleState.SearchFailed;
                 entry.ErrorMessage = ex.Message;
                 this.logger.ErrorException("TMDB search failed for '{0}'", ex, name);
             }
@@ -227,9 +227,9 @@
 
         private async Task HandleRetrySearchAsync(string id)
         {
-            var entry = UserAddMovieTracker.Get(id);
+            var entry = UserAddTitleTracker.Get(id);
             if (entry == null) return;
-            entry.State = UserMovieState.Searching;
+            entry.State = UserTitleState.Searching;
             entry.ErrorMessage = null;
             entry.Candidates.Clear();
             entry.SelectedMatch = null;
@@ -238,11 +238,11 @@
 
         private void HandleManual(string id)
         {
-            var entry = UserAddMovieTracker.Get(id);
+            var entry = UserAddTitleTracker.Get(id);
             if (entry == null) return;
             entry.IsManual = true;
             entry.SelectedMatch = null;
-            entry.State = UserMovieState.Ready;
+            entry.State = UserTitleState.Ready;
             entry.IncludedInBulkAdd = true;
             entry.ErrorMessage = null;
             CheckDestination(entry);
@@ -255,11 +255,11 @@
             int index;
             if (!int.TryParse(commandId.Substring(last + 1), out index)) return;
             string id = commandId.Substring("Select_".Length, last - "Select_".Length);
-            var entry = UserAddMovieTracker.Get(id);
+            var entry = UserAddTitleTracker.Get(id);
             if (entry == null || index < 0 || index >= entry.Candidates.Count) return;
-            entry.SelectedMatch = entry.Candidates[index].Movie;
+            entry.SelectedMatch = entry.Candidates[index].TitleResult;
             entry.IsManual = false;
-            entry.State = UserMovieState.Ready;
+            entry.State = UserTitleState.Ready;
             entry.IncludedInBulkAdd = true;
             entry.ErrorMessage = null;
             CheckDestination(entry);
@@ -272,7 +272,7 @@
             int index;
             if (!int.TryParse(commandId.Substring(last + 1), out index)) return;
             string id = commandId.Substring("Info_".Length, last - "Info_".Length);
-            var entry = UserAddMovieTracker.Get(id);
+            var entry = UserAddTitleTracker.Get(id);
             if (entry == null || index < 0 || index >= entry.Candidates.Count) return;
             string key = id + "_" + index;
             if (this.expandedInfo.Contains(key))
@@ -288,22 +288,22 @@
                 {
                     candidate.CastNames = await this.tmdbService.GetCastAsync(
                         this.plugin.Configuration.TmdbApiKey,
-                        candidate.Movie.Id,
+                        candidate.TitleResult.Id,
                         entry.MediaType,
                         CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
                     candidate.CastNames = new List<string>();
-                    this.logger.ErrorException("TMDB cast lookup failed for '{0}'", ex, candidate.Movie.Title);
+                    this.logger.ErrorException("TMDB cast lookup failed for '{0}'", ex, candidate.TitleResult.Title);
                 }
             }
         }
 
         private void HandleToggleBulk(string id)
         {
-            var entry = UserAddMovieTracker.Get(id);
-            if (entry == null || entry.State != UserMovieState.Ready) return;
+            var entry = UserAddTitleTracker.Get(id);
+            if (entry == null || entry.State != UserTitleState.Ready) return;
             if (!entry.IncludedInBulkAdd)
             {
                 CheckDestination(entry);
@@ -317,7 +317,7 @@
 
         private async Task HandleSubmitOneAsync(string id)
         {
-            var entry = UserAddMovieTracker.Get(id);
+            var entry = UserAddTitleTracker.Get(id);
             if (entry == null) return;
             var queued = PrepareSubmission(new[] { entry });
             if (queued.Count == 0) return;
@@ -331,8 +331,8 @@
 
         private async Task HandleAddAllAsync()
         {
-            var selected = UserAddMovieTracker.GetAll()
-                .Where(e => e.State == UserMovieState.Ready && e.IncludedInBulkAdd)
+            var selected = UserAddTitleTracker.GetAll()
+                .Where(e => e.State == UserTitleState.Ready && e.IncludedInBulkAdd)
                 .ToArray();
             if (selected.Length == 0)
             {
@@ -352,9 +352,9 @@
             SyncSubmittedStates();
         }
 
-        private List<UserMovieEntry> PrepareSubmission(IEnumerable<UserMovieEntry> entries)
+        private List<UserTitleEntry> PrepareSubmission(IEnumerable<UserTitleEntry> entries)
         {
-            var queued = new List<UserMovieEntry>();
+            var queued = new List<UserTitleEntry>();
             foreach (var entry in entries)
             {
                 string targetPath = ConfigurationPageView.PathFromKey(
@@ -363,16 +363,16 @@
                 CheckDestination(entry);
                 if (entry.HasDestinationConflict) continue;
 
-                AddMovieEntry global;
+                AddTitleEntry global;
                 if (entry.IsManual)
                 {
-                    global = AddMovieTracker.AddManual(entry.SearchName, entry.SearchYear, entry.MediaType);
+                    global = AddTitleTracker.AddManual(entry.SearchName, entry.SearchYear, entry.MediaType);
                 }
                 else
                 {
                     if (entry.SelectedMatch == null) continue;
-                    global = AddMovieTracker.Add(entry.SearchName, entry.SearchYear, entry.MediaType);
-                    AddMovieTracker.SetConfident(global.Id, entry.SelectedMatch);
+                    global = AddTitleTracker.Add(entry.SearchName, entry.SearchYear, entry.MediaType);
+                    AddTitleTracker.SetConfident(global.Id, entry.SelectedMatch);
                 }
 
                 string folderName = EmbyLibrarySharedService.BuildComingSoonFolderName(
@@ -380,12 +380,12 @@
                     global.ConfirmedYear);
                 string destination = Path.Combine(targetPath, folderName);
 
-                AddMovieTracker.SetQueued(global.Id);
-                AddMovieTracker.RecordFolderPath(global.Id, destination);
+                AddTitleTracker.SetQueued(global.Id);
+                AddTitleTracker.RecordFolderPath(global.Id, destination);
 
                 entry.GlobalTrackerId = global.Id;
                 entry.DestinationPath = destination;
-                entry.State = UserMovieState.Submitted;
+                entry.State = UserTitleState.Submitted;
                 entry.SubmittedAt = DateTime.UtcNow;
                 entry.IncludedInBulkAdd = false;
                 queued.Add(entry);
@@ -397,22 +397,22 @@
         private void StartAddTask()
         {
             var worker = this.taskManager.ScheduledTasks
-                .FirstOrDefault(t => t.ScheduledTask is AddMovieTask);
+                .FirstOrDefault(t => t.ScheduledTask is AddTitleTask);
             if (worker == null)
                 throw new InvalidOperationException("The title addition task was not found.");
             this.taskManager.Execute(worker, new TaskOptions());
         }
 
         private static TimeSpan GetCommandCompletionWait(
-            IList<UserMovieEntry> entries,
+            IList<UserTitleEntry> entries,
             TimeSpan movieWait)
         {
             int tvCount = entries.Count(e => e.MediaType == ComingSoonMediaType.TvShow);
             if (tvCount == 0) return movieWait;
 
-            // AddMovieTask processes entries serially. Allow every TV entry to
+            // AddTitleTask processes entries serially. Allow every TV entry to
             // reach its real terminal state, plus the task's five-second gap
-            // between consecutive entries. Movies retain their deliberately
+            // between consecutive entries. Titles retain their deliberately
             // short fast-path response behaviour.
             return TimeSpan.FromTicks(
                 (TvCompletionWaitPerEntry.Ticks * tvCount) +
@@ -420,14 +420,14 @@
         }
 
         private async Task WaitForCommandCompletionAsync(
-            IList<UserMovieEntry> entries,
+            IList<UserTitleEntry> entries,
             TimeSpan maximumWait)
         {
             DateTime stopAt = DateTime.UtcNow.Add(maximumWait);
             while (DateTime.UtcNow < stopAt)
             {
                 SyncSubmittedStates();
-                if (entries.All(e => e.State == UserMovieState.Added || e.State == UserMovieState.AddFailed))
+                if (entries.All(e => e.State == UserTitleState.Added || e.State == UserTitleState.AddFailed))
                     return;
                 await Task.Delay(150).ConfigureAwait(false);
             }
@@ -435,17 +435,17 @@
 
         private async Task HandleRetryAddAsync(string id)
         {
-            var local = UserAddMovieTracker.Get(id);
+            var local = UserAddTitleTracker.Get(id);
             if (local == null || string.IsNullOrEmpty(local.GlobalTrackerId)) return;
-            var global = AddMovieTracker.Get(local.GlobalTrackerId);
+            var global = AddTitleTracker.Get(local.GlobalTrackerId);
             if (global == null)
             {
-                local.State = UserMovieState.AddFailed;
+                local.State = UserTitleState.AddFailed;
                 local.ErrorMessage = "The original server queue entry no longer exists.";
                 return;
             }
-            AddMovieTracker.SetQueued(global.Id);
-            local.State = UserMovieState.Submitted;
+            AddTitleTracker.SetQueued(global.Id);
+            local.State = UserTitleState.Submitted;
             local.ErrorMessage = null;
             StartAddTask();
             var retried = new[] { local };
@@ -458,27 +458,27 @@
 
         private void SyncSubmittedStates()
         {
-            foreach (var local in UserAddMovieTracker.GetAll()
+            foreach (var local in UserAddTitleTracker.GetAll()
                 .Where(e => !string.IsNullOrEmpty(e.GlobalTrackerId)))
             {
-                var global = AddMovieTracker.Get(local.GlobalTrackerId);
+                var global = AddTitleTracker.Get(local.GlobalTrackerId);
                 if (global == null) continue;
                 local.DestinationPath = global.DisplayFolderPath;
                 switch (global.State)
                 {
-                    case AddMovieState.Queued:
-                        local.State = UserMovieState.Submitted;
+                    case AddTitleState.Queued:
+                        local.State = UserTitleState.Submitted;
                         break;
-                    case AddMovieState.Adding:
-                        local.State = UserMovieState.Adding;
+                    case AddTitleState.Adding:
+                        local.State = UserTitleState.Adding;
                         break;
-                    case AddMovieState.Added:
-                        local.State = UserMovieState.Added;
+                    case AddTitleState.Added:
+                        local.State = UserTitleState.Added;
                         local.CompletedAt = global.CompletedAt;
                         local.ErrorMessage = null;
                         break;
-                    case AddMovieState.AddFailed:
-                        local.State = UserMovieState.AddFailed;
+                    case AddTitleState.AddFailed:
+                        local.State = UserTitleState.AddFailed;
                         local.ErrorMessage = global.ErrorMessage;
                         break;
                 }
@@ -487,19 +487,19 @@
 
         private void HandleRemove(string id)
         {
-            var entry = UserAddMovieTracker.Get(id);
+            var entry = UserAddTitleTracker.Get(id);
             if (entry == null) return;
-            if (entry.State == UserMovieState.Adding)
+            if (entry.State == UserTitleState.Adding)
             {
                 SetStatus("This " + entry.MediaType.DisplayName().ToLowerInvariant() +
                     " cannot be removed while the server is adding it.", ItemStatus.Warning);
                 return;
             }
             this.expandedCandidates.Remove(id);
-            UserAddMovieTracker.Remove(id);
+            UserAddTitleTracker.Remove(id);
         }
 
-        private void CheckDestination(UserMovieEntry entry)
+        private void CheckDestination(UserTitleEntry entry)
         {
             entry.HasDestinationConflict = false;
             entry.ConflictReason = null;
@@ -513,9 +513,9 @@
             string destination = Path.Combine(targetPath, folderName);
             entry.DestinationPath = destination;
 
-            var duplicate = UserAddMovieTracker.GetAll()
+            var duplicate = UserAddTitleTracker.GetAll()
                 .FirstOrDefault(other => other.Id != entry.Id
-                    && other.State != UserMovieState.AddFailed
+                    && other.State != UserTitleState.AddFailed
                     && string.Equals(other.DestinationPath, destination, StringComparison.OrdinalIgnoreCase));
             if (duplicate != null)
             {
@@ -526,7 +526,7 @@
             }
 
             // TMDBID library-wide check — catches cases the folder-name-based
-            // check below cannot: the same movie already Coming Soon under a
+            // check below cannot: the same title already Coming Soon under a
             // different folder name, or already available in the main
             // library outside the Coming Soon workflow.
             int tmdbId = entry.SelectedMatch != null ? entry.SelectedMatch.Id : 0;
@@ -581,11 +581,11 @@
 
         private void BuildActiveList()
         {
-            var entries = UserAddMovieTracker.GetAll()
-                .Where(e => e.State != UserMovieState.Added && e.State != UserMovieState.AddFailed)
+            var entries = UserAddTitleTracker.GetAll()
+                .Where(e => e.State != UserTitleState.Added && e.State != UserTitleState.AddFailed)
                 .ToArray();
             var list = new GenericItemList();
-            int selected = entries.Count(e => e.State == UserMovieState.Ready && e.IncludedInBulkAdd && !e.HasDestinationConflict);
+            int selected = entries.Count(e => e.State == UserTitleState.Ready && e.IncludedInBulkAdd && !e.HasDestinationConflict);
             list.Add(new GenericListItem(IconNames.add_circle,
                 selected > 0 ? string.Format("Add all selected ({0})", selected) : "Add all selected",
                 "Matched and manual entries can be submitted together.")
@@ -606,8 +606,8 @@
 
         private void BuildCompletedList()
         {
-            var completed = UserAddMovieTracker.GetAll()
-                .Where(e => e.State == UserMovieState.Added || e.State == UserMovieState.AddFailed)
+            var completed = UserAddTitleTracker.GetAll()
+                .Where(e => e.State == UserTitleState.Added || e.State == UserTitleState.AddFailed)
                 .ToArray();
             var list = new GenericItemList();
             list.Add(new GenericListItem(IconNames.done_all, "Completed and failed", string.Empty)
@@ -626,7 +626,7 @@
             UI.CompletedList = list;
         }
 
-        private GenericListItem BuildEntryRow(UserMovieEntry entry)
+        private GenericListItem BuildEntryRow(UserTitleEntry entry)
         {
             var row = new GenericListItem
             {
@@ -640,15 +640,15 @@
             };
 
             row.Button1 = BuildPrimaryButton(entry);
-            row.Button2 = new ButtonItem(entry.State == UserMovieState.Added ? "Clear" : "Remove")
+            row.Button2 = new ButtonItem(entry.State == UserTitleState.Added ? "Clear" : "Remove")
             {
                 StandardIcon = StandardIcons.Remove,
                 Data1 = "Remove_" + entry.Id,
                 CommandId = "Remove_" + entry.Id,
-                IsEnabled = entry.State != UserMovieState.Adding
+                IsEnabled = entry.State != UserTitleState.Adding
             };
 
-            if (entry.State == UserMovieState.Ready)
+            if (entry.State == UserTitleState.Ready)
             {
                 row.Toggle = new ToggleButtonItem("Select")
                 {
@@ -659,16 +659,16 @@
                 };
             }
 
-            if (entry.State == UserMovieState.MultipleMatches)
+            if (entry.State == UserTitleState.MultipleMatches)
                 row.SubItems = BuildCandidateRows(entry);
             return row;
         }
 
-        private ButtonItem BuildPrimaryButton(UserMovieEntry entry)
+        private ButtonItem BuildPrimaryButton(UserTitleEntry entry)
         {
             switch (entry.State)
             {
-                case UserMovieState.Ready:
+                case UserTitleState.Ready:
                     return new ButtonItem("Add to Library")
                     {
                         Icon = IconNames.add_circle,
@@ -676,15 +676,15 @@
                         CommandId = "Submit_" + entry.Id,
                         IsEnabled = !entry.HasDestinationConflict
                     };
-                case UserMovieState.NoResults:
-                case UserMovieState.SearchFailed:
+                case UserTitleState.NoResults:
+                case UserTitleState.SearchFailed:
                     return new ButtonItem("Manual")
                     {
                         Icon = IconNames.add_circle,
                         Data1 = "Manual_" + entry.Id,
                         CommandId = "Manual_" + entry.Id
                     };
-                case UserMovieState.AddFailed:
+                case UserTitleState.AddFailed:
                     return new ButtonItem("Retry")
                     {
                         StandardIcon = StandardIcons.Refresh,
@@ -696,7 +696,7 @@
             }
         }
 
-        private List<GenericListItem> BuildCandidateRows(UserMovieEntry entry)
+        private List<GenericListItem> BuildCandidateRows(UserTitleEntry entry)
         {
             var rows = new List<GenericListItem>();
             bool expanded = this.expandedCandidates.Contains(entry.Id);
@@ -709,10 +709,10 @@
                 bool infoOpen = this.expandedInfo.Contains(key);
                 var row = new GenericListItem(
                     IconNames.movie,
-                    candidate.Movie.ReleaseYear > 0
-                        ? string.Format("{0} ({1})", candidate.Movie.Title, candidate.Movie.ReleaseYear)
-                        : candidate.Movie.Title,
-                    Truncate(candidate.Movie.Overview, 140))
+                    candidate.TitleResult.ReleaseYear > 0
+                        ? string.Format("{0} ({1})", candidate.TitleResult.Title, candidate.TitleResult.ReleaseYear)
+                        : candidate.TitleResult.Title,
+                    Truncate(candidate.TitleResult.Overview, 140))
                 {
                     IconMode = ItemListIconMode.SmallRegular,
                     Button1 = new ButtonItem(infoOpen ? "Hide Info" : "Info")
@@ -750,11 +750,11 @@
             return rows;
         }
 
-        private static List<GenericListItem> BuildInfoRows(UserMovieCandidate candidate)
+        private static List<GenericListItem> BuildInfoRows(UserTitleCandidate candidate)
         {
             var rows = new List<GenericListItem>();
-            string url = "https://www.themoviedb.org/" + candidate.Movie.MediaType.TmdbPathSegment() + "/" +
-                candidate.Movie.Id.ToString(CultureInfo.InvariantCulture);
+            string url = "https://www.themoviedb.org/" + candidate.TitleResult.MediaType.TmdbPathSegment() + "/" +
+                candidate.TitleResult.Id.ToString(CultureInfo.InvariantCulture);
             rows.Add(new GenericListItem(IconNames.open_in_new, "View on TMDB", url)
             {
                 IconMode = ItemListIconMode.SmallRegular,
@@ -770,52 +770,52 @@
             return rows;
         }
 
-        private static string BuildSecondaryText(UserMovieEntry entry)
+        private static string BuildSecondaryText(UserTitleEntry entry)
         {
             if (entry.HasDestinationConflict) return entry.ConflictReason;
             switch (entry.State)
             {
-                case UserMovieState.Searching: return "Searching TMDB...";
-                case UserMovieState.MultipleMatches: return "Multiple matches found — select the correct result.";
-                case UserMovieState.Ready:
+                case UserTitleState.Searching: return "Searching TMDB...";
+                case UserTitleState.MultipleMatches: return "Multiple matches found — select the correct result.";
+                case UserTitleState.Ready:
                     if (entry.IsManual) return "Manual entry — ready to submit.";
                     return string.IsNullOrWhiteSpace(entry.SelectedMatch == null ? null : entry.SelectedMatch.Overview)
                         ? "TMDB match ready to submit."
                         : Truncate(entry.SelectedMatch.Overview, 140);
-                case UserMovieState.NoResults: return "No TMDB result — use Manual or remove this entry.";
-                case UserMovieState.SearchFailed: return "TMDB search failed: " + Truncate(entry.ErrorMessage, 110);
-                case UserMovieState.Submitted: return "Submitted to the server. Use Refresh Status if this remains pending.";
-                case UserMovieState.Adding: return "The server is adding this " + entry.MediaType.DisplayName().ToLowerInvariant() + ".";
-                case UserMovieState.Added: return string.IsNullOrEmpty(entry.DestinationPath) ? "Added successfully." : "Added: " + entry.DestinationPath;
-                case UserMovieState.AddFailed: return "Add failed: " + Truncate(entry.ErrorMessage, 110);
+                case UserTitleState.NoResults: return "No TMDB result — use Manual or remove this entry.";
+                case UserTitleState.SearchFailed: return "TMDB search failed: " + Truncate(entry.ErrorMessage, 110);
+                case UserTitleState.Submitted: return "Submitted to the server. Use Refresh Status if this remains pending.";
+                case UserTitleState.Adding: return "The server is adding this " + entry.MediaType.DisplayName().ToLowerInvariant() + ".";
+                case UserTitleState.Added: return string.IsNullOrEmpty(entry.DestinationPath) ? "Added successfully." : "Added: " + entry.DestinationPath;
+                case UserTitleState.AddFailed: return "Add failed: " + Truncate(entry.ErrorMessage, 110);
                 default: return string.Empty;
             }
         }
 
-        private static IconNames StateIcon(UserMovieState state)
+        private static IconNames StateIcon(UserTitleState state)
         {
             switch (state)
             {
-                case UserMovieState.Submitted: return IconNames.hourglass_empty;
-                case UserMovieState.Added: return IconNames.check_circle;
+                case UserTitleState.Submitted: return IconNames.hourglass_empty;
+                case UserTitleState.Added: return IconNames.check_circle;
                 default: return IconNames.video_library;
             }
         }
 
-        private static ItemStatus StateStatus(UserMovieEntry entry)
+        private static ItemStatus StateStatus(UserTitleEntry entry)
         {
             if (entry.HasDestinationConflict) return ItemStatus.Failed;
             switch (entry.State)
             {
-                case UserMovieState.Searching:
-                case UserMovieState.Submitted:
-                case UserMovieState.Adding: return ItemStatus.InProgress;
-                case UserMovieState.Ready:
-                case UserMovieState.Added: return ItemStatus.Succeeded;
-                case UserMovieState.MultipleMatches: return ItemStatus.Warning;
-                case UserMovieState.NoResults:
-                case UserMovieState.SearchFailed:
-                case UserMovieState.AddFailed: return ItemStatus.Failed;
+                case UserTitleState.Searching:
+                case UserTitleState.Submitted:
+                case UserTitleState.Adding: return ItemStatus.InProgress;
+                case UserTitleState.Ready:
+                case UserTitleState.Added: return ItemStatus.Succeeded;
+                case UserTitleState.MultipleMatches: return ItemStatus.Warning;
+                case UserTitleState.NoResults:
+                case UserTitleState.SearchFailed:
+                case UserTitleState.AddFailed: return ItemStatus.Failed;
                 default: return ItemStatus.Unavailable;
             }
         }
@@ -833,15 +833,15 @@
             UI.OverallStatus.Status = status;
         }
 
-        private sealed class BulkMovieEntry
+        private sealed class BulkTitleEntry
         {
             public string Name;
             public int? Year;
         }
 
-        private static List<BulkMovieEntry> ParseBulkMovieInput(string raw, string standaloneYear)
+        private static List<BulkTitleEntry> ParseBulkTitleInput(string raw, string standaloneYear)
         {
-            var result = new List<BulkMovieEntry>();
+            var result = new List<BulkTitleEntry>();
             if (string.IsNullOrWhiteSpace(raw)) return result;
             foreach (string segment in raw.Split('|'))
             {
@@ -856,7 +856,7 @@
                 }
                 name = name.Trim();
                 if (name.Length == 0) continue;
-                result.Add(new BulkMovieEntry { Name = name, Year = ParseYear(yearText) });
+                result.Add(new BulkTitleEntry { Name = name, Year = ParseYear(yearText) });
             }
             if (result.Count == 1 && result[0].Year == null)
                 result[0].Year = ParseYear(standaloneYear);

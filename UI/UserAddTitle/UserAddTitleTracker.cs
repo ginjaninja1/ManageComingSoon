@@ -1,11 +1,11 @@
-﻿namespace ManageComingSoon.UI.UserAddMovie
+namespace ManageComingSoon.UI.UserAddTitle
 {
     using System;
     using System.Collections.Generic;
     using System.Linq;
     using ManageComingSoon.Model;
 
-    internal enum UserMovieState
+    internal enum UserTitleState
     {
         Searching,
         MultipleMatches,
@@ -18,23 +18,23 @@
         AddFailed
     }
 
-    internal sealed class UserMovieCandidate
+    internal sealed class UserTitleCandidate
     {
-        public TmdbMovieResult Movie { get; set; }
+        public TmdbTitleResult TitleResult { get; set; }
         public List<string> CastNames { get; set; }
     }
 
-    internal sealed class UserMovieEntry
+    internal sealed class UserTitleEntry
     {
         public ComingSoonMediaType MediaType { get; set; }
         public string Id { get; set; }
         public DateTime CreatedAt { get; set; }
         public string SearchName { get; set; }
         public int? SearchYear { get; set; }
-        public UserMovieState State { get; set; }
-        public List<UserMovieCandidate> Candidates { get; set; }
-            = new List<UserMovieCandidate>();
-        public TmdbMovieResult SelectedMatch { get; set; }
+        public UserTitleState State { get; set; }
+        public List<UserTitleCandidate> Candidates { get; set; }
+            = new List<UserTitleCandidate>();
+        public TmdbTitleResult SelectedMatch { get; set; }
         public bool IsManual { get; set; }
         public bool IncludedInBulkAdd { get; set; }
         public bool HasDestinationConflict { get; set; }
@@ -69,23 +69,23 @@
     /// <summary>
     /// Separate user-page state shared by the ordinary-user page. It stores drafts, TMDB results and the mapping
     /// to the global operational queue. The admin tracker is touched only when
-    /// a confirmed movie is submitted to AddMovieTask.
+    /// a confirmed title is submitted to AddTitleTask.
     /// </summary>
-    internal static class UserAddMovieTracker
+    internal static class UserAddTitleTracker
     {
         private static readonly object Sync = new object();
-        private static readonly List<UserMovieEntry> Entries = new List<UserMovieEntry>();
+        private static readonly List<UserTitleEntry> Entries = new List<UserTitleEntry>();
 
-        public static UserMovieEntry Add(string name, int? year, ComingSoonMediaType mediaType)
+        public static UserTitleEntry Add(string name, int? year, ComingSoonMediaType mediaType)
         {
-            var entry = new UserMovieEntry
+            var entry = new UserTitleEntry
             {
                 Id = Guid.NewGuid().ToString("N"),
                 CreatedAt = DateTime.UtcNow,
                 SearchName = name,
                 SearchYear = year,
                 MediaType = mediaType,
-                State = UserMovieState.Searching,
+                State = UserTitleState.Searching,
                 IncludedInBulkAdd = false
             };
 
@@ -96,26 +96,26 @@
             }
         }
 
-        public static UserMovieEntry AddManual(string name, int? year, ComingSoonMediaType mediaType)
+        public static UserTitleEntry AddManual(string name, int? year, ComingSoonMediaType mediaType)
         {
             var entry = Add(name, year, mediaType);
             lock (Sync)
             {
-                entry.State = UserMovieState.Ready;
+                entry.State = UserTitleState.Ready;
                 entry.IsManual = true;
                 entry.IncludedInBulkAdd = true;
                 return entry;
             }
         }
 
-        public static UserMovieEntry Get(string id)
+        public static UserTitleEntry Get(string id)
         {
             lock (Sync)
                 return Entries
                     .FirstOrDefault(e => string.Equals(e.Id, id, StringComparison.Ordinal));
         }
 
-        public static UserMovieEntry[] GetAll()
+        public static UserTitleEntry[] GetAll()
         {
             lock (Sync)
                 return Entries
@@ -136,7 +136,7 @@
         {
             lock (Sync)
                 Entries.RemoveAll(e =>
-                    e.State == UserMovieState.Added || e.State == UserMovieState.AddFailed);
+                    e.State == UserTitleState.Added || e.State == UserTitleState.AddFailed);
         }
 
     }

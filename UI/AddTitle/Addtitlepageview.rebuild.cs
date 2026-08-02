@@ -1,12 +1,12 @@
-﻿// ManageComingSoon - Add Movie Page View [Rebuild]
-// RefreshAddButtonState + RebuildMovieList (builds fresh UI composition from
-// AddMovieTracker state on every push) and the overall status footer.
-// See AddMoviePageView.cs for the full file map.
+// ManageComingSoon - Add Movie Page View [Rebuild]
+// RefreshAddButtonState + RebuildTitleList (builds fresh UI composition from
+// AddTitleTracker state on every push) and the overall status footer.
+// See AddTitlePageView.cs for the full file map.
 //
-// Design principle: RebuildMovieList is a pure function from tracker state
+// Design principle: RebuildTitleList is a pure function from tracker state
 // to UI composition. It builds fresh GenericItemList and GenericListItem
 // instances on every call — no caching, no reuse, no memory of previous
-// state. Both MovieList (active rows) and CompletedList (completed rows)
+// state. Both TitleList (active rows) and CompletedList (completed rows)
 // are assigned fresh instances before every broadcast so the client always
 // receives a clean composition with no inherited rendering state.
 //
@@ -15,9 +15,9 @@
 // UpdateOverallStatus therefore has a single "conflict" counter that reads
 // entry.IsAddBlocked across Confident entries — no separate state to count.
 //
-// AnyConfident renamed to AnyNeedingPoll in AddMovieTracker, updated here.
+// AnyConfident renamed to AnyNeedingPoll in AddTitleTracker, updated here.
 
-namespace ManageComingSoon.UI.AddMovie
+namespace ManageComingSoon.UI.AddTitle
 {
     using Emby.Web.GenericEdit.Elements;
     using Emby.Web.GenericEdit.Elements.List;
@@ -32,7 +32,7 @@ namespace ManageComingSoon.UI.AddMovie
     using System.Collections.Generic;
     using System.Linq;
 
-    internal partial class AddMoviePageView : PluginPageView, IDisposable
+    internal partial class AddTitlePageView : PluginPageView, IDisposable
     {
         // -----------------------------------------------------------------------
         // Add button state — disabled with guidance when no TMDB key is configured
@@ -60,11 +60,11 @@ namespace ManageComingSoon.UI.AddMovie
         }
 
         // -----------------------------------------------------------------------
-        // RebuildMovieList
+        // RebuildTitleList
         //
         // Builds two fresh GenericItemLists from current tracker state:
         //
-        //   MovieList:     "Add All" header + active rows (non-Added, newest first)
+        //   TitleList:     "Add All" header + active rows (non-Added, newest first)
         //   CompletedList: "Completed" header + completed rows (most-recently-
         //                  completed first)
         //
@@ -77,21 +77,21 @@ namespace ManageComingSoon.UI.AddMovie
         // one end — no mid-list identity changes.
         // -----------------------------------------------------------------------
 
-        private void RebuildMovieList()
+        private void RebuildTitleList()
         {
             var ui = UI;
-            var entries = AddMovieTracker.GetAllSorted();
-            var active = entries.Where(e => e.State != AddMovieState.Added).ToArray();
-            var completed = entries.Where(e => e.State == AddMovieState.Added).ToArray();
+            var entries = AddTitleTracker.GetAllSorted();
+            var active = entries.Where(e => e.State != AddTitleState.Added).ToArray();
+            var completed = entries.Where(e => e.State == AddTitleState.Added).ToArray();
 
-            // ---- MovieList: Add All header + active rows -------------------
+            // ---- TitleList: Add All header + active rows -------------------
 
-            var movieList = new GenericItemList();
+            var titleList = new GenericItemList();
 
             int selectedCount = active.Count(e =>
-                e.State == AddMovieState.Confident && !e.IsAddBlocked && e.IncludedInBulkAdd);
-            int queuedCount = active.Count(e => e.State == AddMovieState.Queued);
-            bool anyAdding = active.Any(e => e.State == AddMovieState.Adding);
+                e.State == AddTitleState.Confident && !e.IsAddBlocked && e.IncludedInBulkAdd);
+            int queuedCount = active.Count(e => e.State == AddTitleState.Queued);
+            bool anyAdding = active.Any(e => e.State == AddTitleState.Adding);
             bool addAllEnabled = selectedCount > 0 || queuedCount > 0;
 
             ItemStatus addAllStatus = anyAdding || queuedCount > 0
@@ -128,10 +128,10 @@ namespace ManageComingSoon.UI.AddMovie
                     CommandId = "AddAll",
                     IsEnabled = addAllEnabled,
                 },
-                SubItems = active.Select(BuildMovieRow).ToList(),
+                SubItems = active.Select(BuildTitleRow).ToList(),
             };
 
-            movieList.Add(addAllRow);
+            titleList.Add(addAllRow);
 
             // ---- CompletedList: Completed header + completed rows ----------
 
@@ -152,12 +152,12 @@ namespace ManageComingSoon.UI.AddMovie
                     CommandId = "ClearCompleted",
                     IsEnabled = completed.Length > 0,
                 },
-                SubItems = completed.Select(BuildMovieRow).ToList(),
+                SubItems = completed.Select(BuildTitleRow).ToList(),
             };
 
             completedList.Add(completedRow);
 
-            ui.MovieList = movieList;
+            ui.TitleList = titleList;
             ui.CompletedList = completedList;
 
             // Diagnostic: row counts actually sent to the client on this
@@ -166,14 +166,14 @@ namespace ManageComingSoon.UI.AddMovie
             //   - If active/completed counts here don't move in a clean
             //     staircase (e.g. 5,4,3,2,1,0) that matches what the browser
             //     shows a moment later, the server itself is the source —
-            //     look at AddMovieTracker's mutation methods / GetAllSorted.
+            //     look at AddTitleTracker's mutation methods / GetAllSorted.
             //   - If the counts here DO move cleanly but the browser still
             //     flickers, the problem is downstream of this method: either
             //     multiple instanceId values are interleaved (see the
             //     construct/dispose log lines), or the client itself.
             //   - If more than one distinct instanceId appears with
             //     overlapping "constructed"/"disposed" log lines, that alone
-            //     confirms duplicate live AddMoviePageView instances.
+            //     confirms duplicate live AddTitlePageView instances.
             this.logger.Info(
                 "MCS-DIAG instance={0} event=rows seq={1} active={2} completed={3} names=[{4}]",
                 this.instanceId,
@@ -190,10 +190,10 @@ namespace ManageComingSoon.UI.AddMovie
 
         private void UpdateOverallStatus()
         {
-            var entries = AddMovieTracker.GetAllSorted();
-            int searching = entries.Count(e => e.State == AddMovieState.Searching);
-            int queued = entries.Count(e => e.State == AddMovieState.Queued);
-            int adding = entries.Count(e => e.State == AddMovieState.Adding);
+            var entries = AddTitleTracker.GetAllSorted();
+            int searching = entries.Count(e => e.State == AddTitleState.Searching);
+            int queued = entries.Count(e => e.State == AddTitleState.Queued);
+            int adding = entries.Count(e => e.State == AddTitleState.Adding);
 
             var parts = new List<string>();
             if (searching > 0) parts.Add(string.Format("{0} searching", searching));

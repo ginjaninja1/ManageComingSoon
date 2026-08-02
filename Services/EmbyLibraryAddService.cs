@@ -1,10 +1,10 @@
-﻿// ManageComingSoon - Emby Library Add Service
+// ManageComingSoon - Emby Library Add Service
 // Handles the "Add Coming Soon" pipeline only.
 // Derives from EmbyLibrarySharedService for all shared helpers.
 //
-// Public API consumed by AddMoviePageView / AddMovieTask:
+// Public API consumed by AddTitlePageView / AddTitleTask:
 //   AddComingSoonAsync()          — legacy fire-and-forget path (kept intact)
-//   AddComingSoonPipelineAsync()  — single-movie pipeline; called by AddMovieTask
+//   AddComingSoonPipelineAsync()  — single-title pipeline; called by AddTitleTask
 
 namespace ManageComingSoon.Services
 {
@@ -65,7 +65,7 @@ namespace ManageComingSoon.Services
         }
 
         // -----------------------------------------------------------------------
-        // Public wrappers for AddMovieTask post-queue refresh
+        // Public wrappers for AddTitleTask post-queue refresh
         // These expose the shared base helpers at the minimum required visibility.
         // -----------------------------------------------------------------------
 
@@ -116,7 +116,7 @@ namespace ManageComingSoon.Services
         };
 
         // -----------------------------------------------------------------------
-        // Legacy fire-and-forget add path (kept intact; not called by AddMovieTask)
+        // Legacy fire-and-forget add path (kept intact; not called by AddTitleTask)
         // -----------------------------------------------------------------------
         // Steps 1-3: Create placeholder, register pending path, scan.
         // Step 4 (tagging) is handled by ComingSoonEntryPoint.OnItemAdded
@@ -125,12 +125,12 @@ namespace ManageComingSoon.Services
 
         /*
         public async Task<string> AddComingSoonAsync(
-            TmdbMovieResult movie,
+            TmdbTitleResult title,
             string libraryPath,
             string customStubPath,
             CancellationToken token)
         {
-            string safeName = BuildComingSoonFolderName(movie.Title, movie.ReleaseYear);
+            string safeName = BuildComingSoonFolderName(title.Title, title.ReleaseYear);
             string folderPath = Path.Combine(libraryPath, safeName);
 
             this.logger.Info("[Step 1] Suppressing LibraryMonitor for {0}", folderPath);
@@ -163,7 +163,7 @@ namespace ManageComingSoon.Services
         }
         */
         // -----------------------------------------------------------------------
-        // Single-movie pipeline — called by AddMovieTask for every queued entry.
+        // Single-title pipeline — called by AddTitleTask for every queued entry.
         //
         // Design notes vs. AddComingSoonAsync:
         //   1. Uses an explicit REST refresh trigger (CallRefreshEndpointAsync)
@@ -178,7 +178,7 @@ namespace ManageComingSoon.Services
         // active polling for proof that the tag arrived, with a timeout.
         // -----------------------------------------------------------------------
         public async Task<AddComingSoonResult> AddComingSoonPipelineAsync(
-            TmdbMovieResult movie,
+            TmdbTitleResult title,
             ComingSoonMediaType mediaType,
             string targetPath,
             string customStubPath,
@@ -187,14 +187,15 @@ namespace ManageComingSoon.Services
             Action<string> onStatus,
             CancellationToken token)
         {
-            string safeName = BuildComingSoonFolderName(movie.Title, movie.ReleaseYear);
+            string safeName = BuildComingSoonFolderName(title.Title, title.ReleaseYear);
             string folderPath = Path.Combine(targetPath, safeName);
             string stubName = mediaType == ComingSoonMediaType.TvShow
                 ? safeName + " - S01E01" + GetStubExtension(customStubPath)
                 : safeName + GetStubExtension(customStubPath);
             string stubFile = Path.Combine(folderPath, stubName);
 
-            this.logger.Info("[AddPipeline] ===== START ===== folder={0}", folderPath);
+            this.logger.Info("[AddPipeline/{0}] ===== START ===== folder={1}",
+                mediaType.DisplayName(), folderPath);
 
             try
             {
@@ -262,12 +263,12 @@ namespace ManageComingSoon.Services
                 ReportAdd(progress, AddComingSoonStage.RefreshTargetLibrary);
 
                 // Stage 3 — ConfirmIngestedAndTagged
-                BaseItem taggedMovie = null;
+                BaseItem taggedItem = null;
                 bool confirmed = await WaitForConditionAsync(
                     () =>
                     {
-                        taggedMovie = FindComingSoonItemInFolder(folderPath, mediaType);
-                        return taggedMovie != null;
+                        taggedItem = FindComingSoonItemInFolder(folderPath, mediaType);
+                        return taggedItem != null;
                     },
                     token, "AddPipeline/ConfirmIngestedAndTagged",
                     AddPipelineIngestPassSeconds,
@@ -306,28 +307,29 @@ namespace ManageComingSoon.Services
                     onStatus?.Invoke("Refreshing TV Show metadata and artwork…");
                     await CallRefreshEndpointAsync(
                         http.Value.Client, http.Value.BaseUrl,
-                        taggedMovie.InternalId, "Series (metadata and artwork)",
+                        taggedItem.InternalId, "Series (metadata and artwork)",
                         apiKey, MetadataRefreshMode.FullRefresh,
                         "AddPipeline/RefreshSeriesMetadata", token).ConfigureAwait(false);
 
                 }
 
-                LogItemState("AddPipeline - confirmed ingested and tagged", mediaType.DisplayName(), taggedMovie);
+                LogItemState("AddPipeline - confirmed ingested and tagged", mediaType.DisplayName(), taggedItem);
                 ReportAdd(progress, AddComingSoonStage.ConfirmIngestedAndTagged);
 
-                this.logger.Info("[AddPipeline] ===== COMPLETE ===== '{0}'", movie.Title);
+                this.logger.Info("[AddPipeline/{0}] ===== COMPLETE ===== '{1}'",
+                    mediaType.DisplayName(), title.Title);
                 ReportAdd(progress, AddComingSoonStage.Complete);
 
                 return new AddComingSoonResult
                 {
                     Success = true,
                     FolderPath = folderPath,
-                    FinalItemId = taggedMovie.Id
+                    FinalItemId = taggedItem.Id
                 };
             }
             catch (OperationCanceledException)
             {
-                // AddMovieTask races this pipeline against ComingSoonEntryPoint's
+                // AddTitleTask races this pipeline against ComingSoonEntryPoint's
                 // ItemAdded fast path and deliberately cancels whichever one
                 // loses. This is that expected, harmless outcome — not a bug —
                 // so it's logged quietly rather than as an Error-level unhandled
@@ -335,7 +337,7 @@ namespace ManageComingSoon.Services
                 // noise for anyone reading the server log.
                 this.logger.Info(
                     "[AddPipeline] Pipeline for '{0}' was cancelled — superseded by a faster completion path.",
-                    movie.Title);
+                    title.Title);
                 return new AddComingSoonResult
                 {
                     Success = false,

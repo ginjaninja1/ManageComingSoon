@@ -1,4 +1,4 @@
-﻿// ManageComingSoon - Emby Library Shared Service
+// ManageComingSoon - Emby Library Shared Service
 // Base class holding every helper that both EmbyLibraryAddService and
 // EmbyLibraryMakeService need. 
 
@@ -542,7 +542,7 @@ namespace ManageComingSoon.Services
         /// choke point that guarantees a missing/unknown year (0 or negative)
         /// can never reach disk as a literal "(0)" — it falls back to the
         /// current calendar year instead. Upstream code should still avoid
-        /// producing a 0 year in the first place (see AddMovieTracker.
+        /// producing a 0 year in the first place (see AddTitleTracker.
         /// SetManualConfident and TmdbService.IsConfidentMatch), but this is
         /// the last line of defense.
         /// </summary>

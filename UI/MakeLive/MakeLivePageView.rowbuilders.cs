@@ -1,5 +1,5 @@
-﻿// ManageComingSoon - Make Live Page View [RowBuilders]
-// BuildActiveTrackerRow, BuildQueuedRow, BuildHistoryRow, BuildMovieRow, and
+// ManageComingSoon - Make Live Page View [RowBuilders]
+// BuildActiveTrackerRow, BuildQueuedRow, BuildHistoryRow, BuildTitleRow, and
 // the centralised State -> (icon/status) mapping helpers.
 // See MakeLivePageView.cs for the full file map.
 //
@@ -271,7 +271,7 @@ namespace ManageComingSoon.UI.MakeLive
         //
         // Button1 (Make Live / Retry):
         //   • In-flight  → disabled placeholder (belt-and-suspenders; normally
-        //                   RebuildMovieList emits an Active row instead)
+        //                   RebuildTitleList emits an Active row instead)
         //   • Ready + On → "Make Live" enabled
         //   • Ready + Off → disabled placeholder (preserves column width)
         //   • Blocked    → "Retry" enabled (triggers fresh analysis)
@@ -280,7 +280,7 @@ namespace ManageComingSoon.UI.MakeLive
         //   disabled while any run phase is active to prevent mid-run changes.
         // -----------------------------------------------------------------------
 
-        private GenericListItem BuildMovieRow(MakeLiveEntry entry, bool isRunning = false)
+        private GenericListItem BuildTitleRow(MakeLiveEntry entry, bool isRunning = false)
         {
             bool isOn = entry.ToggledOn;
             bool isReady = entry.Analysis != null && entry.Analysis.IsSafeToProceed;

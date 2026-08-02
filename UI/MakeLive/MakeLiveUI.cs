@@ -8,7 +8,7 @@ namespace ManageComingSoon.UI.MakeLive
     // -----------------------------------------------------------------------
     // Minimal UI shell, matching the Add Coming Soon tab's persona.
     // Per-row state (icon, status colour, progress, buttons) is built entirely
-    // in MakeLivePageView.RebuildMovieList(). Only the manual Refresh control
+    // in MakeLivePageView.RebuildTitleList(). Only the manual Refresh control
     // and a footer status line live here.
     // -----------------------------------------------------------------------
     public class MakeLiveUI : EditableOptionsBase
@@ -26,7 +26,7 @@ namespace ManageComingSoon.UI.MakeLive
                 CommandId = "RefreshList",
             };
 
-        public GenericItemList MovieList { get; set; } = new GenericItemList();
+        public GenericItemList TitleList { get; set; } = new GenericItemList();
 
         public StatusItem OverallStatus { get; set; } =
             new StatusItem("Status", string.Empty, ItemStatus.Unavailable);

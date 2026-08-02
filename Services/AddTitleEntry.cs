@@ -1,6 +1,6 @@
-﻿// ManageComingSoon - Add Movie Entry & State
-// Model for a single row in the Add Coming Soon movie search list.
-// Persisted to disk via AddMovieStore so the list survives page reloads.
+// ManageComingSoon - Add Title Entry & State
+// Model for a single row in the Add Coming Soon title search list.
+// Persisted to disk via AddTitleStore so the list survives page reloads.
 
 namespace ManageComingSoon.Services
 {
@@ -12,7 +12,7 @@ namespace ManageComingSoon.Services
     // -----------------------------------------------------------------------
     // State enum — drives row rendering and available actions
     // -----------------------------------------------------------------------
-    public enum AddMovieState
+    public enum AddTitleState
     {
         /// <summary>TMDB search in progress.</summary>
         Searching,
@@ -54,9 +54,9 @@ namespace ManageComingSoon.Services
     }
 
     // -----------------------------------------------------------------------
-    // Persisted candidate — lightweight subset of TmdbMovieResult
+    // Persisted candidate — lightweight subset of TmdbTitleResult
     // -----------------------------------------------------------------------
-    public class AddMovieCandidate
+    public class AddTitleCandidate
     {
         public ComingSoonMediaType MediaType { get; set; }
         public int TmdbId { get; set; }
@@ -69,7 +69,7 @@ namespace ManageComingSoon.Services
         public double Popularity { get; set; }
 
         /// <summary>
-        /// Top 3 cast member names fetched from TMDB /movie/{id}/credits.
+        /// Top 3 cast member names fetched from the media-type-specific TMDB credits endpoint.
         /// Null until first Info button click; empty list if fetch returned no cast.
         /// Persisted so subsequent page loads don't need to re-fetch.
         /// </summary>
@@ -93,9 +93,9 @@ namespace ManageComingSoon.Services
         public string TmdbUrl()
             => string.Format("https://www.themoviedb.org/{0}/{1}", MediaType.TmdbPathSegment(), TmdbId);
 
-        /// <summary>Build from a full TmdbMovieResult (used when storing candidates).</summary>
-        public static AddMovieCandidate FromTmdb(TmdbMovieResult r)
-            => new AddMovieCandidate
+        /// <summary>Build from a full TmdbTitleResult (used when storing candidates).</summary>
+        public static AddTitleCandidate FromTmdb(TmdbTitleResult r)
+            => new AddTitleCandidate
             {
                 MediaType = r.MediaType,
                 TmdbId = r.Id,
@@ -113,8 +113,8 @@ namespace ManageComingSoon.Services
         /// at any time — a snapshot must not hold a reference that could be
         /// swapped out from under a caller mid-read.
         /// </summary>
-        public AddMovieCandidate Clone()
-            => new AddMovieCandidate
+        public AddTitleCandidate Clone()
+            => new AddTitleCandidate
             {
                 MediaType = MediaType,
                 TmdbId = TmdbId,
@@ -128,9 +128,9 @@ namespace ManageComingSoon.Services
     }
 
     // -----------------------------------------------------------------------
-    // Main entry — one row per movie the user has added to the search list
+    // Main entry — one row per title the user has added to the search list
     // -----------------------------------------------------------------------
-    public class AddMovieEntry
+    public class AddTitleEntry
     {
         public ComingSoonMediaType MediaType { get; set; }
         // ---- Identity -------------------------------------------------------
@@ -145,7 +145,7 @@ namespace ManageComingSoon.Services
         public DateTime? CompletedAt { get; set; }
 
         // ---- Current state -------------------------------------------------
-        public AddMovieState State { get; set; } = AddMovieState.Searching;
+        public AddTitleState State { get; set; } = AddTitleState.Searching;
         public string ErrorMessage { get; set; } = string.Empty;
 
         // ---- Destination conflict annotation (replaces DestinationConflict state)
@@ -161,9 +161,9 @@ namespace ManageComingSoon.Services
 
         /// <summary>
         /// Set once, the first time an entry transitions Queued -> Adding.
-        /// Used by AddMovieTracker to enforce a minimum visible dwell time in
+        /// Used by AddTitleTracker to enforce a minimum visible dwell time in
         /// the Adding state before allowing a completion (from either
-        /// AddMovieTask's own pipeline or ComingSoonEntryPoint's fast path)
+        /// AddTitleTask's own pipeline or ComingSoonEntryPoint's fast path)
         /// to actually apply — otherwise a sub-200ms real completion never
         /// renders on a polling client. Null until first entering Adding;
         /// not reset by subsequent SetAdding calls for the same attempt.
@@ -171,9 +171,9 @@ namespace ManageComingSoon.Services
         public DateTime? AddingStartedAt { get; set; }
 
         /// <summary>
-        /// Set once by AddMovieTracker.NotifyPathConfirmed when Emby's
+        /// Set once by AddTitleTracker.NotifyPathConfirmed when Emby's
         /// ItemAdded fires for this entry's registered path. Signal only —
-        /// never mutates State. AddMovieTask remains the sole writer of
+        /// never mutates State. AddTitleTask remains the sole writer of
         /// terminal transitions; this just tells its fast-path race that
         /// ComingSoonEntryPoint has already confirmed the file landed, so it
         /// can stop its own redundant pipeline and apply completion itself.
@@ -182,7 +182,7 @@ namespace ManageComingSoon.Services
 
         /// <summary>
         /// Pipeline progress percentage (0-100) while State == Adding.
-        /// Written by AddMovieTask via AddMovieTracker.SetAddingPercent() on
+        /// Written by AddTitleTask via AddTitleTracker.SetAddingPercent() on
         /// every itemProgress callback. Read by BuildPollSignature so every
         /// percentage change triggers a UI push. Reset to 0 on state transitions.
         /// </summary>
@@ -196,7 +196,7 @@ namespace ManageComingSoon.Services
         public string ConfirmedPosterPath { get; set; } = string.Empty;
 
         // ---- Candidate list (stored when MultipleMatches, up to 10) --------
-        public List<AddMovieCandidate> Candidates { get; set; } = new List<AddMovieCandidate>();
+        public List<AddTitleCandidate> Candidates { get; set; } = new List<AddTitleCandidate>();
 
         // ---- Result ---------------------------------------------------------
         public string AddedFolderPath { get; set; } = string.Empty;
@@ -216,12 +216,12 @@ namespace ManageComingSoon.Services
         /// alive and their destinations are continuously conflict-checked.
         /// </summary>
         public bool IsActive
-            => State == AddMovieState.Searching
-            || State == AddMovieState.Queued
-            || State == AddMovieState.Adding;
+            => State == AddTitleState.Searching
+            || State == AddTitleState.Queued
+            || State == AddTitleState.Adding;
 
         public bool IsTerminal
-            => State == AddMovieState.Added;
+            => State == AddTitleState.Added;
 
         public string DisplayTitle
             => !string.IsNullOrEmpty(ConfirmedTitle) ? ConfirmedTitle : SearchName;
@@ -247,24 +247,24 @@ namespace ManageComingSoon.Services
         /// Adding: live progress. AddFailed: frozen at the point of failure.
         /// </summary>
         public bool ShowProgress
-            => State == AddMovieState.Adding || State == AddMovieState.AddFailed;
+            => State == AddTitleState.Adding || State == AddTitleState.AddFailed;
 
         /// <summary>
         /// True when the entry is Confident but the destination is known to conflict.
         /// Add button is disabled; row shows ConflictReason as secondary text.
         /// </summary>
         public bool IsAddBlocked
-            => State == AddMovieState.Confident && HasDestinationConflict;
+            => State == AddTitleState.Confident && HasDestinationConflict;
 
         /// <summary>
         /// True for states where this entry holds an active destination path claim
         /// (used by duplicate-destination detection).
         /// </summary>
         public bool ClaimsDestination
-            => State == AddMovieState.Confident
-            || State == AddMovieState.Queued
-            || State == AddMovieState.Adding
-            || State == AddMovieState.AddFailed;
+            => State == AddTitleState.Confident
+            || State == AddTitleState.Queued
+            || State == AddTitleState.Adding
+            || State == AddTitleState.AddFailed;
 
         public string ConfirmedPosterUrl()
             => string.IsNullOrEmpty(ConfirmedPosterPath)
@@ -273,17 +273,17 @@ namespace ManageComingSoon.Services
 
         /// <summary>
         /// Deep copy for handing to readers outside the tracker's Lock
-        /// (RebuildMovieList, status counts, etc). AddMovieEntry is a plain
-        /// mutable object living inside AddMovieTracker's dictionary; a
-        /// background AddMovieTask thread can mutate it (State, AddingPercent,
+        /// (RebuildTitleList, status counts, etc). AddTitleEntry is a plain
+        /// mutable object living inside AddTitleTracker's dictionary; a
+        /// background AddTitleTask thread can mutate it (State, AddingPercent,
         /// AddingDetail, ...) at any moment. Reading fields off the live
         /// object across several lines/statements — exactly what
-        /// BuildMovieRow does — risks a torn read. Clone() must be called
-        /// while still holding AddMovieTracker.Lock so the copy is a
+        /// BuildTitleRow does — risks a torn read. Clone() must be called
+        /// while still holding AddTitleTracker.Lock so the copy is a
         /// consistent point-in-time snapshot.
         /// </summary>
-        public AddMovieEntry Clone()
-            => new AddMovieEntry
+        public AddTitleEntry Clone()
+            => new AddTitleEntry
             {
                 Id = Id,
                 MediaType = MediaType,
@@ -306,7 +306,7 @@ namespace ManageComingSoon.Services
                 ConfirmedOverview = ConfirmedOverview,
                 ConfirmedPosterPath = ConfirmedPosterPath,
                 Candidates = Candidates == null
-                    ? new List<AddMovieCandidate>()
+                    ? new List<AddTitleCandidate>()
                     : Candidates.ConvertAll(c => c.Clone()),
                 AddedFolderPath = AddedFolderPath,
                 IncludedInBulkAdd = IncludedInBulkAdd,

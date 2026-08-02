@@ -1,9 +1,9 @@
-﻿namespace ManageComingSoon.UI
+namespace ManageComingSoon.UI
 {
     using System;
     using System.Threading.Tasks;
     using ManageComingSoon.Services;
-    using ManageComingSoon.UI.UserAddMovie;
+    using ManageComingSoon.UI.UserAddTitle;
     using ManageComingSoon.UIBaseClasses;
     using MediaBrowser.Model.Dto;
     using MediaBrowser.Model.Logging;
@@ -52,7 +52,7 @@
 
         public override Task<IPluginUIView> CreateDefaultPageView()
         {
-            IPluginUIView view = new UserAddMoviePageView(
+            IPluginUIView view = new UserAddTitlePageView(
                 this.pluginInfo,
                 this.plugin,
                 this.tmdbService,

@@ -1,6 +1,6 @@
-﻿// ManageComingSoon - Add Movie Store
+// ManageComingSoon - Add Title Store
 // JSON-backed persistence for the Add Coming Soon search list.
-// Stores a List<AddMovieEntry> as a single file in Emby's plugin data folder.
+// Stores a List<AddTitleEntry> as a single file in Emby's plugin data folder.
 // Mirrors the PluginConfigStore pattern exactly.
 
 namespace ManageComingSoon.Storage
@@ -15,7 +15,7 @@ namespace ManageComingSoon.Storage
     using MediaBrowser.Model.Logging;
     using MediaBrowser.Model.Serialization;
 
-    public class AddMovieStore
+    public class AddTitleStore
     {
         private readonly ILogger logger;
         private readonly IJsonSerializer jsonSerializer;
@@ -23,7 +23,7 @@ namespace ManageComingSoon.Storage
         private readonly string storeFilePath;
         private readonly object lockObj = new object();
 
-        public AddMovieStore(IApplicationHost applicationHost, ILogger logger)
+        public AddTitleStore(IApplicationHost applicationHost, ILogger logger)
         {
             this.logger = logger;
             this.jsonSerializer = applicationHost.Resolve<IJsonSerializer>();
@@ -35,7 +35,7 @@ namespace ManageComingSoon.Storage
             if (!this.fileSystem.DirectoryExists(dir))
                 this.fileSystem.CreateDirectory(dir);
 
-            this.storeFilePath = Path.Combine(dir, "ManageComingSoon.AddMovieList.json");
+            this.storeFilePath = Path.Combine(dir, "ManageComingSoon.AddTitleList.json");
         }
 
         // -----------------------------------------------------------------------
@@ -43,7 +43,7 @@ namespace ManageComingSoon.Storage
         // -----------------------------------------------------------------------
 
         /// <summary>Load all persisted entries. Returns empty list if file absent or corrupt.</summary>
-        public List<AddMovieEntry> Load()
+        public List<AddTitleEntry> Load()
         {
             lock (this.lockObj)
             {
@@ -52,7 +52,7 @@ namespace ManageComingSoon.Storage
         }
 
         /// <summary>Persist the full entry list atomically.</summary>
-        public void Save(List<AddMovieEntry> entries)
+        public void Save(List<AddTitleEntry> entries)
         {
             if (entries == null) throw new ArgumentNullException("entries");
             lock (this.lockObj)
@@ -65,29 +65,29 @@ namespace ManageComingSoon.Storage
         // Internals (called under lock)
         // -----------------------------------------------------------------------
 
-        private List<AddMovieEntry> LoadInternal()
+        private List<AddTitleEntry> LoadInternal()
         {
             try
             {
                 if (!this.fileSystem.FileExists(this.storeFilePath))
-                    return new List<AddMovieEntry>();
+                    return new List<AddTitleEntry>();
 
                 using (var stream = this.fileSystem.OpenRead(this.storeFilePath))
                 {
                     var result = this.jsonSerializer
-                        .DeserializeFromStream<List<AddMovieEntry>>(stream);
-                    return result ?? new List<AddMovieEntry>();
+                        .DeserializeFromStream<List<AddTitleEntry>>(stream);
+                    return result ?? new List<AddTitleEntry>();
                 }
             }
             catch (Exception ex)
             {
                 this.logger.ErrorException(
-                    "ManageComingSoon: AddMovieStore failed to load – returning empty list", ex);
-                return new List<AddMovieEntry>();
+                    "ManageComingSoon: AddTitleStore failed to load – returning empty list", ex);
+                return new List<AddTitleEntry>();
             }
         }
 
-        private void SaveInternal(List<AddMovieEntry> entries)
+        private void SaveInternal(List<AddTitleEntry> entries)
         {
             try
             {
@@ -101,7 +101,7 @@ namespace ManageComingSoon.Storage
             catch (Exception ex)
             {
                 this.logger.ErrorException(
-                    "ManageComingSoon: AddMovieStore failed to save", ex);
+                    "ManageComingSoon: AddTitleStore failed to save", ex);
             }
         }
     }

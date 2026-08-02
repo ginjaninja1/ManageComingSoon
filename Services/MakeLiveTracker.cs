@@ -1,7 +1,7 @@
 // ManageComingSoon - Make Live Tracker
 // Static in-memory state machine for in-flight and historic make-live ops.
 // All state changes are immediately persisted via MakeLiveStore.
-// Mirrors the AddMovieTracker pattern.
+// Mirrors the AddTitleTracker pattern.
 
 namespace ManageComingSoon.Services
 {
@@ -483,8 +483,8 @@ namespace ManageComingSoon.Services
 
         /// <summary>
         /// Returns true if the entry for folderPath exists and is currently Moving
-        /// or ScanPending. Used by RebuildMovieList to filter the Coming Soon
-        /// section and by BuildMovieRow to grey the Make Live button.
+        /// or ScanPending. Used by RebuildTitleList to filter the Coming Soon
+        /// section and by BuildTitleRow to grey the Make Live button.
         /// </summary>
         public static bool IsInFlight(string folderPath)
         {

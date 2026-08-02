@@ -36,23 +36,23 @@ namespace ManageComingSoon.Services
         // Public API
         // -----------------------------------------------------------------------
 
-        public async Task<List<TmdbMovieResult>> SearchAsync(
+        public async Task<List<TmdbTitleResult>> SearchAsync(
             string apiKey,
-            string movieName,
+            string titleName,
             int? year,
             ComingSoonMediaType mediaType,
             CancellationToken token = default(CancellationToken))
         {
-            var results = new List<TmdbMovieResult>();
+            var results = new List<TmdbTitleResult>();
 
             // Primary search (with year if supplied)
-            var primary = await SearchTitleAsync(apiKey, movieName, year, mediaType, token).ConfigureAwait(false);
+            var primary = await SearchTitleAsync(apiKey, titleName, year, mediaType, token).ConfigureAwait(false);
             MergeInto(results, primary);
 
             // Also search without year so ±1 candidates aren't missed
             if (year.HasValue)
             {
-                var noYear = await SearchTitleAsync(apiKey, movieName, null, mediaType, token).ConfigureAwait(false);
+                var noYear = await SearchTitleAsync(apiKey, titleName, null, mediaType, token).ConfigureAwait(false);
                 MergeInto(results, noYear);
             }
 
@@ -61,20 +61,20 @@ namespace ManageComingSoon.Services
             foreach (var r in results.ToList())
             {
                 var alts = await GetAltTitlesAsync(apiKey, r.Id, mediaType, token).ConfigureAwait(false);
-                if (alts.Any(a => string.Equals(a, movieName, StringComparison.OrdinalIgnoreCase)))
+                if (alts.Any(a => string.Equals(a, titleName, StringComparison.OrdinalIgnoreCase)))
                     altBoostIds.Add(r.Id);
             }
 
             // Score and sort — most confident first
             int currentYear = DateTime.UtcNow.Year;
             return results
-                .Select(r => new { R = r, S = Score(r, movieName, year, currentYear, altBoostIds) })
+                .Select(r => new { R = r, S = Score(r, titleName, year, currentYear, altBoostIds) })
                 .OrderByDescending(x => x.S)
                 .Select(x => x.R)
                 .ToList();
         }
 
-        public bool IsConfidentMatch(List<TmdbMovieResult> results, string movieName, int? year)
+        public bool IsConfidentMatch(List<TmdbTitleResult> results, string titleName, int? year)
         {
             if (results.Count == 0) return false;
 
@@ -98,8 +98,8 @@ namespace ManageComingSoon.Services
             if (results.Count == 1 && yearMatch) return true;
 
             bool titleMatch =
-                TitlesRoughlyEqual(top.Title, movieName) ||
-                TitlesRoughlyEqual(top.OriginalTitle, movieName);
+                TitlesRoughlyEqual(top.Title, titleName) ||
+                TitlesRoughlyEqual(top.OriginalTitle, titleName);
 
             if (titleMatch && year.HasValue && top.ReleaseYear == year.Value) return true;
 
@@ -197,7 +197,7 @@ namespace ManageComingSoon.Services
         // Private: HTTP fetch helpers
         // -----------------------------------------------------------------------
 
-        private async Task<List<TmdbMovieResult>> SearchTitleAsync(
+        private async Task<List<TmdbTitleResult>> SearchTitleAsync(
             string apiKey, string query, int? year, ComingSoonMediaType mediaType, CancellationToken token)
         {
             string url = string.Format(
@@ -211,21 +211,21 @@ namespace ManageComingSoon.Services
                 url += (mediaType == ComingSoonMediaType.TvShow ? "&first_air_date_year=" : "&primary_release_year=") + year.Value;
 
             string raw = await FetchStringAsync(url, token).ConfigureAwait(false);
-            if (string.IsNullOrEmpty(raw)) return new List<TmdbMovieResult>();
+            if (string.IsNullOrEmpty(raw)) return new List<TmdbTitleResult>();
 
             try
             {
                 var wrapper = this.json.DeserializeFromString<TmdbSearchWrapper>(raw);
                 var results = wrapper != null && wrapper.Results != null
                     ? wrapper.Results
-                    : new List<TmdbMovieResult>();
+                    : new List<TmdbTitleResult>();
                 foreach (var result in results) result.Normalize(mediaType);
                 return results;
             }
             catch (Exception ex)
             {
                 this.logger.ErrorException("ManageComingSoon: Failed to parse TMDB search response", ex);
-                return new List<TmdbMovieResult>();
+                return new List<TmdbTitleResult>();
             }
         }
 
@@ -294,7 +294,7 @@ namespace ManageComingSoon.Services
         // -----------------------------------------------------------------------
 
         private static double Score(
-            TmdbMovieResult r,
+            TmdbTitleResult r,
             string query,
             int? year,
             int currentYear,
@@ -410,7 +410,7 @@ namespace ManageComingSoon.Services
         // Helpers
         // -----------------------------------------------------------------------
 
-        private static void MergeInto(List<TmdbMovieResult> target, List<TmdbMovieResult> source)
+        private static void MergeInto(List<TmdbTitleResult> target, List<TmdbTitleResult> source)
         {
             foreach (var r in source)
                 if (target.All(x => x.Id != r.Id))
@@ -423,7 +423,7 @@ namespace ManageComingSoon.Services
 
         private class TmdbSearchWrapper
         {
-            public List<TmdbMovieResult> Results { get; set; }
+            public List<TmdbTitleResult> Results { get; set; }
         }
 
         private class TmdbAltTitlesWrapper
@@ -450,7 +450,7 @@ namespace ManageComingSoon.Services
 
     /// <summary>
     /// Response shape for TMDB's GET /movie/{id} — used only by the direct-by-ID
-    /// enrichment path (GetMovieDetailsAsync), separate from TmdbMovieResult
+    /// enrichment path (GetMovieDetailsAsync), separate from TmdbTitleResult
     /// which is shaped for /search/movie results. Field names match TMDB's
     /// snake_case JSON keys per ServiceStack.Text's case-insensitive mapping.
     /// </summary>

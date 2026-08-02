@@ -10,7 +10,7 @@
 		<Compile Remove="ChannelEntryPoint.cs" />
 		<Compile Remove="ChannelUI.cs" />
 		<Compile Remove="Services\EmbyLibraryService.cs" />
-		<Compile Remove="UI\AddMovie\Addmoviepageview.polling.cs" />
+		<Compile Remove="UI\AddTitle\Addtitlepageview.polling.cs" />
 	</ItemGroup>
 	<!--
     Point $(EmbyServerPath) at your Emby Server installation's system/ folder.

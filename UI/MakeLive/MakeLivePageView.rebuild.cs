@@ -1,6 +1,6 @@
-﻿// ManageComingSoon - Make Live Page View [Rebuild]
-// RebuildMovieList — three sections built from MakeLiveTracker (the single
-// source of truth) and swapped atomically onto ui.MovieList.
+// ManageComingSoon - Make Live Page View [Rebuild]
+// RebuildTitleList — three sections built from MakeLiveTracker (the single
+// source of truth) and swapped atomically onto ui.TitleList.
 // UpdateOverallStatus/SetOverallStatus for the status footer.
 // See MakeLivePageView.cs for the full file map.
 //
@@ -26,20 +26,20 @@ namespace ManageComingSoon.UI.MakeLive
     internal partial class MakeLivePageView : PluginPageView, IDisposable
     {
         // -----------------------------------------------------------------------
-        // RebuildMovieList
+        // RebuildTitleList
         // Built into a fresh list and swapped atomically to avoid an
         // ArgumentOutOfRangeException when the request thread is mid-serialisation
-        // of ui.MovieList at the same moment this runs on the background poll thread.
+        // of ui.TitleList at the same moment this runs on the background poll thread.
         //
         // taskPct: the overall task progress percentage from ITaskManager, or null
         // when called outside a poll tick (no percentage available). Passed straight
         // through to UpdateOverallStatus so the status banner can show "X%" during
         // a run. Previously this was set by PollProgress before calling
-        // RebuildMovieList and then overwritten by UpdateOverallStatus(null) inside
+        // RebuildTitleList and then overwritten by UpdateOverallStatus(null) inside
         // it — that bug meant the percentage was never actually visible.
         // -----------------------------------------------------------------------
 
-        private void RebuildMovieList(double? taskPct = null, bool preserveStatus = false)
+        private void RebuildTitleList(double? taskPct = null, bool preserveStatus = false)
         {
             var ui = UI;
             var newList = new GenericItemList();
@@ -93,7 +93,7 @@ namespace ManageComingSoon.UI.MakeLive
 
             // ---- 2. Pending (Coming Soon) rows — alphabetical -----------------
             foreach (var entry in MakeLiveTracker.GetAllPending())
-                newList.Add(BuildMovieRow(entry, isRunning));
+                newList.Add(BuildTitleRow(entry, isRunning));
 
             // ---- 3. Queued rows — between Pending and Active ------------------
             foreach (var entry in queued)
@@ -128,7 +128,7 @@ namespace ManageComingSoon.UI.MakeLive
                     newList.Add(BuildHistoryRow(entry));
             }
 
-            ui.MovieList = newList;
+            ui.TitleList = newList;
             if (!preserveStatus)
                 UpdateOverallStatus(taskPct);
         }

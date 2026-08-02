@@ -1,4 +1,4 @@
-﻿namespace ManageComingSoon.UI.UserAddMovie
+namespace ManageComingSoon.UI.UserAddTitle
 {
     using System.Collections.Generic;
     using System.ComponentModel;
@@ -10,7 +10,7 @@
     using MediaBrowser.Model.Plugins;
     using MediaBrowser.Model.LocalizationAttributes;
 
-    public sealed class UserAddMovieUI : EditableOptionsBase
+    public sealed class UserAddTitleUI : EditableOptionsBase
     {
         public override string EditorTitle => "Add Coming Soon Titles";
 
@@ -35,7 +35,7 @@
 
         [DisplayName("Title")]
         [Description("or eg. Title1;Year|Title2|Title3;Year...to add multiple titles quickly")]
-        public string MovieName { get; set; } = string.Empty;
+        public string TitleName { get; set; } = string.Empty;
 
         [DisplayName("Year (optional)")]
         public string ReleaseYear { get; set; } = string.Empty;

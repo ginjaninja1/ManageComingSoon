@@ -1,7 +1,7 @@
-﻿// ManageComingSoon - Add Movie Page View [RowBuilders]
-// BuildMovieRow, the candidate + info sub-row builders, and the small
+// ManageComingSoon - Add Movie Page View [RowBuilders]
+// BuildTitleRow, the candidate + info sub-row builders, and the small
 // State → (icon / text / button) mapping helpers.
-// See AddMoviePageView.cs for the full file map.
+// See AddTitlePageView.cs for the full file map.
 //
 // Design principle: this file is a thin dressing function from tracker state
 // to UI composition. Every rebuild constructs fresh GenericListItem instances
@@ -9,7 +9,7 @@
 //
 // All domain interpretation (best display title, display year, display path,
 // whether to show progress, whether the add button is blocked) is resolved
-// by computed properties on AddMovieEntry. This file reads those properties
+// by computed properties on AddTitleEntry. This file reads those properties
 // and maps them to Emby UI primitives — it makes no domain decisions itself.
 //
 // DestinationConflict is not a separate state: it is entry.IsAddBlocked,
@@ -18,7 +18,7 @@
 // case that checks it for the conflict reason. No DestinationConflict case
 // appears anywhere in this file.
 
-namespace ManageComingSoon.UI.AddMovie
+namespace ManageComingSoon.UI.AddTitle
 {
     using Emby.Web.GenericEdit.Elements;
     using Emby.Web.GenericEdit.Elements.List;
@@ -33,13 +33,13 @@ namespace ManageComingSoon.UI.AddMovie
     using System.Collections.Generic;
     using System.Linq;
 
-    internal partial class AddMoviePageView : PluginPageView, IDisposable
+    internal partial class AddTitlePageView : PluginPageView, IDisposable
     {
         // -----------------------------------------------------------------------
-        // BuildMovieRow — dresses one tracker entry as a GenericListItem
+        // BuildTitleRow — dresses one tracker entry as a GenericListItem
         // -----------------------------------------------------------------------
 
-        private GenericListItem BuildMovieRow(AddMovieEntry entry)
+        private GenericListItem BuildTitleRow(AddTitleEntry entry)
         {
             var row = new GenericListItem
             {
@@ -52,7 +52,7 @@ namespace ManageComingSoon.UI.AddMovie
             };
 
             // Spinner replaces the static icon while actively adding.
-            if (entry.State == AddMovieState.Adding)
+            if (entry.State == AddTitleState.Adding)
                 row.StandardIcon = StandardIcons.Loading;
             else
                 row.Icon = StateToIcon(entry.State);
@@ -60,19 +60,19 @@ namespace ManageComingSoon.UI.AddMovie
             row.Button1 = BuildPrimaryButton(entry);
 
             row.Button2 = new ButtonItem(
-                entry.State == AddMovieState.Added ? "Clear" : "Remove")
+                entry.State == AddTitleState.Added ? "Clear" : "Remove")
             {
                 StandardIcon = StandardIcons.Remove,
                 Data1 = "Remove_" + entry.Id,
                 CommandId = "Remove_" + entry.Id,
                 // Removing is blocked while the pipeline holds the entry.
-                IsEnabled = entry.State != AddMovieState.Adding,
+                IsEnabled = entry.State != AddTitleState.Adding,
             };
 
             // Toggle: only Confident rows participate in bulk-add selection.
             // Non-Added, non-Confident rows get a disabled placeholder so the
             // toggle column width stays consistent across mixed-state lists.
-            if (entry.State == AddMovieState.Confident)
+            if (entry.State == AddTitleState.Confident)
             {
                 row.Toggle = new ToggleButtonItem("Select")
                 {
@@ -82,7 +82,7 @@ namespace ManageComingSoon.UI.AddMovie
                     IsEnabled = true,
                 };
             }
-            else if (entry.State != AddMovieState.Added)
+            else if (entry.State != AddTitleState.Added)
             {
                 row.Toggle = new ToggleButtonItem("Select")
                 {
@@ -93,7 +93,7 @@ namespace ManageComingSoon.UI.AddMovie
                 };
             }
 
-            if (entry.State == AddMovieState.MultipleMatches
+            if (entry.State == AddTitleState.MultipleMatches
                 && entry.Candidates.Count > 0)
                 row.SubItems = BuildCandidateSubItems(entry);
 
@@ -104,9 +104,9 @@ namespace ManageComingSoon.UI.AddMovie
         // Primary text
         // -----------------------------------------------------------------------
 
-        private static string BuildPrimaryText(AddMovieEntry entry)
+        private static string BuildPrimaryText(AddTitleEntry entry)
         {
-            // DisplayTitle and DisplayYear are computed by AddMovieEntry:
+            // DisplayTitle and DisplayYear are computed by AddTitleEntry:
             // confirmed values when known, search input before that.
             string titleYear = entry.DisplayYear > 0
                 ? string.Format("{0} ({1})", entry.DisplayTitle, entry.DisplayYear)
@@ -115,7 +115,7 @@ namespace ManageComingSoon.UI.AddMovie
 
             // Queued rows show the destination parent path as a visual confirmation
             // that the correct target folder has been resolved.
-            if (entry.State == AddMovieState.Queued
+            if (entry.State == AddTitleState.Queued
                 && !string.IsNullOrEmpty(entry.DisplayFolderPath))
                 return string.Format("{0}  \u2192  {1}", titleYear, entry.DisplayFolderPath);
 
@@ -126,28 +126,28 @@ namespace ManageComingSoon.UI.AddMovie
         // Secondary text
         // -----------------------------------------------------------------------
 
-        private static string BuildSecondaryText(AddMovieEntry entry)
+        private static string BuildSecondaryText(AddTitleEntry entry)
         {
             switch (entry.State)
             {
-                case AddMovieState.Searching:
+                case AddTitleState.Searching:
                     return "Searching TMDB...";
 
-                case AddMovieState.MultipleMatches:
+                case AddTitleState.MultipleMatches:
                     return string.Format(
                         "Multiple matches found — select the correct one ({0} options):",
                         entry.Candidates.Count);
 
-                case AddMovieState.NoResults:
+                case AddTitleState.NoResults:
                     return "No results found — search again or use 'Manual'";
 
-                case AddMovieState.SearchFailed:
+                case AddTitleState.SearchFailed:
                     return string.IsNullOrEmpty(entry.ErrorMessage)
                         ? "Search failed — search again or use 'Manual'"
                         : string.Format("Search failed: {0} — search again or use 'Manual'",
                             TruncateError(entry.ErrorMessage));
 
-                case AddMovieState.Confident:
+                case AddTitleState.Confident:
                     // Destination conflict takes priority over the overview.
                     if (entry.IsAddBlocked)
                         return string.IsNullOrEmpty(entry.ConflictReason)
@@ -161,15 +161,15 @@ namespace ManageComingSoon.UI.AddMovie
                         ? "Confident match found"
                         : Truncate(entry.ConfirmedOverview, 140);
 
-                case AddMovieState.Queued:
+                case AddTitleState.Queued:
                     return "In queue — will be processed by the next Add All run";
 
-                case AddMovieState.Adding:
+                case AddTitleState.Adding:
                     return string.IsNullOrEmpty(entry.AddingDetail)
                         ? "Adding to library — please wait..."
                         : entry.AddingDetail;
 
-                case AddMovieState.Added:
+                case AddTitleState.Added:
                     // CompletedAt is always set by SetAdded; the fallback is a safety net.
                     string path = !string.IsNullOrEmpty(entry.DisplayFolderPath)
                         ? entry.DisplayFolderPath : "library";
@@ -179,7 +179,7 @@ namespace ManageComingSoon.UI.AddMovie
                             entry.CompletedAt.Value.ToLocalTime().ToString("dd MMM yyyy, HH:mm"))
                         : string.Format("Added {0}", path);
 
-                case AddMovieState.AddFailed:
+                case AddTitleState.AddFailed:
                     return string.IsNullOrEmpty(entry.ErrorMessage)
                         ? "Add failed — retry or remove this entry"
                         : string.Format("Add failed: {0}", TruncateError(entry.ErrorMessage));
@@ -193,11 +193,11 @@ namespace ManageComingSoon.UI.AddMovie
         // Primary button
         // -----------------------------------------------------------------------
 
-        private static ButtonItem BuildPrimaryButton(AddMovieEntry entry)
+        private static ButtonItem BuildPrimaryButton(AddTitleEntry entry)
         {
             switch (entry.State)
             {
-                case AddMovieState.Confident:
+                case AddTitleState.Confident:
                     // IsAddBlocked (destination conflict) disables the button
                     // without changing the label — the user can see what they
                     // would be pressing once the conflict clears.
@@ -209,8 +209,8 @@ namespace ManageComingSoon.UI.AddMovie
                         IsEnabled = !entry.IsAddBlocked,
                     };
 
-                case AddMovieState.NoResults:
-                case AddMovieState.SearchFailed:
+                case AddTitleState.NoResults:
+                case AddTitleState.SearchFailed:
                     return new ButtonItem("Manual")
                     {
                         Icon = IconNames.add_circle,
@@ -219,7 +219,7 @@ namespace ManageComingSoon.UI.AddMovie
                         IsEnabled = true,
                     };
 
-                case AddMovieState.AddFailed:
+                case AddTitleState.AddFailed:
                     return new ButtonItem("Retry")
                     {
                         StandardIcon = StandardIcons.Refresh,
@@ -228,7 +228,7 @@ namespace ManageComingSoon.UI.AddMovie
                         IsEnabled = true,
                     };
 
-                case AddMovieState.Added:
+                case AddTitleState.Added:
                     return new ButtonItem("Added")
                     {
                         Icon = IconNames.check_circle,
@@ -247,31 +247,31 @@ namespace ManageComingSoon.UI.AddMovie
         // State mapping helpers — icon and item status
         // -----------------------------------------------------------------------
 
-        private static IconNames StateToIcon(AddMovieState state)
+        private static IconNames StateToIcon(AddTitleState state)
         {
             switch (state)
             {
-                case AddMovieState.Queued: return IconNames.hourglass_empty;
-                case AddMovieState.Added: return IconNames.check_circle;
+                case AddTitleState.Queued: return IconNames.hourglass_empty;
+                case AddTitleState.Added: return IconNames.check_circle;
                 default: return IconNames.video_library;
             }
         }
 
-        private static ItemStatus StateToItemStatus(AddMovieEntry entry)
+        private static ItemStatus StateToItemStatus(AddTitleEntry entry)
         {
             switch (entry.State)
             {
-                case AddMovieState.Searching: return ItemStatus.InProgress;
-                case AddMovieState.MultipleMatches: return ItemStatus.Warning;
-                case AddMovieState.NoResults: return ItemStatus.Failed;
-                case AddMovieState.SearchFailed: return ItemStatus.Failed;
-                case AddMovieState.Confident:
+                case AddTitleState.Searching: return ItemStatus.InProgress;
+                case AddTitleState.MultipleMatches: return ItemStatus.Warning;
+                case AddTitleState.NoResults: return ItemStatus.Failed;
+                case AddTitleState.SearchFailed: return ItemStatus.Failed;
+                case AddTitleState.Confident:
                     // A blocked Confident row is visually distinct from a clear one.
                     return entry.IsAddBlocked ? ItemStatus.Failed : ItemStatus.Succeeded;
-                case AddMovieState.Queued: return ItemStatus.Unavailable;
-                case AddMovieState.Adding: return ItemStatus.InProgress;
-                case AddMovieState.Added: return ItemStatus.Succeeded;
-                case AddMovieState.AddFailed: return ItemStatus.Failed;
+                case AddTitleState.Queued: return ItemStatus.Unavailable;
+                case AddTitleState.Adding: return ItemStatus.InProgress;
+                case AddTitleState.Added: return ItemStatus.Succeeded;
+                case AddTitleState.AddFailed: return ItemStatus.Failed;
                 default: return ItemStatus.Unavailable;
             }
         }
@@ -280,7 +280,7 @@ namespace ManageComingSoon.UI.AddMovie
         // Candidate sub-items (MultipleMatches state)
         // -----------------------------------------------------------------------
 
-        private List<GenericListItem> BuildCandidateSubItems(AddMovieEntry entry)
+        private List<GenericListItem> BuildCandidateSubItems(AddTitleEntry entry)
         {
             var subItems = new List<GenericListItem>();
             bool isExpanded = this.expandedCandidates.Contains(entry.Id);
@@ -381,7 +381,7 @@ namespace ManageComingSoon.UI.AddMovie
         // Info sub-items: TMDB link + cast
         // -----------------------------------------------------------------------
 
-        private static List<GenericListItem> BuildInfoSubItems(AddMovieCandidate c)
+        private static List<GenericListItem> BuildInfoSubItems(AddTitleCandidate c)
         {
             var items = new List<GenericListItem>();
 

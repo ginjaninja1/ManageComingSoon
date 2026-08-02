@@ -1,10 +1,10 @@
-// ManageComingSoon - Add Movie UI
-// Minimal UI shell for the multi-movie search page.
+// ManageComingSoon - Add Title UI
+// Minimal UI shell for the multi-title search page.
 // All list content (including Add All row) is built dynamically in
-// AddMoviePageView.RebuildMovieList(). Only the input fields, list,
+// AddTitlePageView.RebuildTitleList(). Only the input fields, list,
 // and overall status item live here.
 
-namespace ManageComingSoon.UI.AddMovie
+namespace ManageComingSoon.UI.AddTitle
 {
     using System.Collections.Generic;
     using System.ComponentModel;
@@ -16,7 +16,7 @@ namespace ManageComingSoon.UI.AddMovie
     using MediaBrowser.Model.Plugins;
     using MediaBrowser.Model.LocalizationAttributes;
 
-    public class AddMovieUI : EditableOptionsBase
+    public class AddTitleUI : EditableOptionsBase
     {
         public override string EditorTitle => "Add Coming Soon Titles";
         public override string EditorDescription =>
@@ -35,8 +35,8 @@ namespace ManageComingSoon.UI.AddMovie
         public string MediaType { get; set; } = "Movie";
 
         [DisplayName("Title")]
-        [Description("or Movie1;Year|Movie2|Movie3;Year...)")]
-        public string MovieName { get; set; } = string.Empty;
+        [Description("or Title1;Year|Title2|Title3;Year...)")]
+        public string TitleName { get; set; } = string.Empty;
 
         [DisplayName("Year (optional)")]
         public string ReleaseYear { get; set; } = string.Empty;
@@ -58,7 +58,7 @@ namespace ManageComingSoon.UI.AddMovie
             };
 
         
-        public GenericItemList MovieList { get; set; } = new GenericItemList();
+        public GenericItemList TitleList { get; set; } = new GenericItemList();
 
         // ---- Overall status (diagnostic footer) -----------------------------
         public StatusItem OverallStatus { get; set; } =

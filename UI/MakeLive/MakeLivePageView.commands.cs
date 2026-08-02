@@ -1,4 +1,4 @@
-﻿// ManageComingSoon - Make Live Page View [Commands]
+// ManageComingSoon - Make Live Page View [Commands]
 // RunCommand (the command dispatch table) and every Handle*/LoadAndAnalyse/
 // AnalyseOne/GetMakeLiveWorker method it routes to.
 // See MakeLivePageView.cs for the full file map.
@@ -62,7 +62,7 @@ namespace ManageComingSoon.UI.MakeLive
             {
                 // ClearAllPending + re-upsert resets toggle state to a clean slate.
                 LoadAndAnalyse();
-                RebuildMovieList();
+                RebuildTitleList();
                 RaiseUIViewInfoChanged();
                 return Task.FromResult<IPluginUIView>(this);
             }
@@ -70,7 +70,7 @@ namespace ManageComingSoon.UI.MakeLive
             if (commandId == "ClearCompleted")
             {
                 MakeLiveTracker.ClearCompleted();
-                RebuildMovieList();
+                RebuildTitleList();
                 RaiseUIViewInfoChanged();
                 return Task.FromResult<IPluginUIView>(this);
             }
@@ -128,7 +128,7 @@ namespace ManageComingSoon.UI.MakeLive
             {
                 string folderPath = commandId.Substring(6);
                 ReanalyseRow(folderPath);
-                RebuildMovieList();
+                RebuildTitleList();
                 RaiseUIViewInfoChanged();
                 return Task.FromResult<IPluginUIView>(this);
             }
@@ -153,7 +153,7 @@ namespace ManageComingSoon.UI.MakeLive
             if (entry.ToggledOn)
             {
                 MakeLiveTracker.SetPendingToggle(folderPath, toggledOn: false, manuallyToggledOff: true);
-                RebuildMovieList();
+                RebuildTitleList();
                 return;
             }
 
@@ -164,7 +164,7 @@ namespace ManageComingSoon.UI.MakeLive
             if (entry != null && entry.Analysis != null && entry.Analysis.IsSafeToProceed)
                 MakeLiveTracker.SetPendingToggle(folderPath, toggledOn: true, manuallyToggledOff: false);
 
-            RebuildMovieList();
+            RebuildTitleList();
         }
 
         private void ReanalyseRow(string folderPath)
@@ -201,7 +201,7 @@ namespace ManageComingSoon.UI.MakeLive
             }
 
             MakeLiveTracker.SetPending(folderPath);
-            RebuildMovieList();
+            RebuildTitleList();
         }
 
         // -----------------------------------------------------------------------
@@ -346,7 +346,7 @@ namespace ManageComingSoon.UI.MakeLive
                 SetOverallStatus(
                     "Nothing to make live — all selected items failed the final check. See row status for details.",
                     ItemStatus.Failed);
-                RebuildMovieList(preserveStatus: true);
+                RebuildTitleList(preserveStatus: true);
                 RaiseUIViewInfoChanged();
                 return;
             }
@@ -375,12 +375,12 @@ namespace ManageComingSoon.UI.MakeLive
             }
 
             string statusMsg = blockedPaths.Count > 0
-                ? string.Format("Queued {0} movie(s); {1} blocked — see row status.",
+                    ? string.Format("Queued {0} title(s); {1} blocked — see row status.",
                     goodPaths.Count, blockedPaths.Count)
-                : string.Format("Queued {0} movie(s) for processing...", goodPaths.Count);
+                    : string.Format("Queued {0} title(s) for processing...", goodPaths.Count);
 
             SetOverallStatus(statusMsg, ItemStatus.InProgress);
-            RebuildMovieList();
+            RebuildTitleList();
             RaiseUIViewInfoChanged();
 
             try

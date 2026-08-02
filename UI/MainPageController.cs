@@ -3,7 +3,7 @@ namespace ManageComingSoon.UI
     using System.Collections.Generic;
     using System.Threading.Tasks;
     using ManageComingSoon.Services;
-    using ManageComingSoon.UI.AddMovie;
+    using ManageComingSoon.UI.AddTitle;
     using ManageComingSoon.UI.Configuration;
     using ManageComingSoon.UI.MakeLive;
     using ManageComingSoon.UI.Security;
@@ -90,7 +90,7 @@ namespace ManageComingSoon.UI
         // Tab 1 (default): Add Coming Soon
         public override Task<IPluginUIView> CreateDefaultPageView()
         {
-            IPluginUIView view = new AddMoviePageView(
+            IPluginUIView view = new AddTitlePageView(
                 pluginInfo, plugin, tmdbService, addService, logger, taskManager);
             return Task.FromResult(view);
         }

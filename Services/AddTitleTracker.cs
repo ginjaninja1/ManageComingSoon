@@ -1,6 +1,6 @@
-﻿// ManageComingSoon - Add Movie Tracker
+// ManageComingSoon - Add Title Tracker
 // Static in-memory state machine for the Add Coming Soon search list.
-// All state changes are immediately persisted via AddMovieStore.
+// All state changes are immediately persisted via AddTitleStore.
 //
 // UI notification model:
 //   Every public mutation method is decorated [UI] or [backend] in its summary.
@@ -14,7 +14,7 @@
 //             calls a [UI] method internally, that [UI] method fires
 //             OnStateChanged automatically — no special handling needed.
 //
-//   OnStateChanged is wired once by AddMovieTask.SetDependencies. The page
+//   OnStateChanged is wired once by AddTitleTask.SetDependencies. The page
 //   view subscribes once in its constructor. No poll timer is required.
 //
 // DestinationConflict is not a separate state — it is HasDestinationConflict
@@ -37,7 +37,7 @@ namespace ManageComingSoon.Services
     using ManageComingSoon.Storage;
     using MediaBrowser.Model.Logging;
 
-    public static class AddMovieTracker
+    public static class AddTitleTracker
     {
         // -----------------------------------------------------------------------
         // Adding step constants — internal; consumed only by SetAdding here.
@@ -50,13 +50,13 @@ namespace ManageComingSoon.Services
         private const int PercentFloorAwaitingIngest = 40;
 
         // Minimum time an entry must have visibly been in Adding before a
-        // completion (from either AddMovieTask's own pipeline or
+        // completion (from either AddTitleTask's own pipeline or
         // ComingSoonEntryPoint's fast path) is allowed to actually apply.
         // Deliberate UX padding, not a technical necessity — real completion
         // can be as fast as ~100ms, far too short for a polling client to
         // ever reliably render. Costs no extra wall-clock time overall since
         // it's well under MinGapBetweenItemsSeconds' existing 5s floor in
-        // AddMovieTask — this just spends part of that already-existing gap
+        // AddTitleTask — this just spends part of that already-existing gap
         // on visible progress instead of dead time after completion.
         private static readonly TimeSpan MinVisibleAddingDuration = TimeSpan.FromMilliseconds(1200);
 
@@ -64,14 +64,14 @@ namespace ManageComingSoon.Services
         // In-memory dictionary — Id is the key
         // -----------------------------------------------------------------------
 
-        private static readonly Dictionary<string, AddMovieEntry> Entries =
-            new Dictionary<string, AddMovieEntry>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, AddTitleEntry> Entries =
+            new Dictionary<string, AddTitleEntry>(StringComparer.OrdinalIgnoreCase);
 
         private static readonly object Lock = new object();
-        private static AddMovieStore store;
+        private static AddTitleStore store;
         private static volatile bool isShuttingDown;
 
-        // Diagnostic only — wired from AddMoviePageView's constructor (idempotent,
+        // Diagnostic only — wired from AddTitlePageView's constructor (idempotent,
         // safe to set repeatedly). Not a hard dependency: every use is Log?.Warn(...)
         // so the tracker works fine before anything sets it.
         private static ILogger Log;
@@ -82,7 +82,7 @@ namespace ManageComingSoon.Services
         }
 
         // -----------------------------------------------------------------------
-        // UI notification — single delegate wired by AddMovieTask.SetDependencies.
+        // UI notification — single delegate wired by AddTitleTask.SetDependencies.
         // -----------------------------------------------------------------------
 
         /// <summary>
@@ -105,9 +105,9 @@ namespace ManageComingSoon.Services
         /// All other tracker state is trusted as-is: the tracker is the single
         /// point of truth and page navigation must not alter it.
         /// </summary>
-        public static void Initialise(AddMovieStore addMovieStore)
+        public static void Initialise(AddTitleStore addTitleStore)
         {
-            store = addMovieStore;
+            store = addTitleStore;
             lock (Lock)
             {
                 Entries.Clear();
@@ -120,7 +120,7 @@ namespace ManageComingSoon.Services
                 var toRemove = new List<string>();
                 foreach (var entry in Entries.Values)
                 {
-                    if (entry.State == AddMovieState.Added
+                    if (entry.State == AddTitleState.Added
                         && entry.CompletedAt.HasValue
                         && entry.CompletedAt.Value < cutoff)
                         toRemove.Add(entry.Id);
@@ -138,15 +138,15 @@ namespace ManageComingSoon.Services
         // -----------------------------------------------------------------------
 
         /// <summary>
-        /// Snapshots all Queued entries at AddMovieTask start, oldest first.
-        /// Entries remain Queued in the dictionary — AddMovieTask transitions
+        /// Snapshots all Queued entries at AddTitleTask start, oldest first.
+        /// Entries remain Queued in the dictionary — AddTitleTask transitions
         /// each one to Adding before calling the pipeline.
         /// </summary>
-        public static AddMovieEntry[] DequeueAllQueued()
+        public static AddTitleEntry[] DequeueAllQueued()
         {
             lock (Lock)
                 return Entries.Values
-                    .Where(e => e.State == AddMovieState.Queued)
+                    .Where(e => e.State == AddTitleState.Queued)
                     .OrderBy(e => e.CreatedAt)
                     .ToArray();
         }
@@ -156,16 +156,16 @@ namespace ManageComingSoon.Services
         // -----------------------------------------------------------------------
 
         /// <summary>[UI] Creates a new entry in Searching state and persists it.</summary>
-        public static AddMovieEntry Add(string searchName, int? searchYear, ComingSoonMediaType mediaType)
+        public static AddTitleEntry Add(string searchName, int? searchYear, ComingSoonMediaType mediaType)
         {
-            var entry = new AddMovieEntry
+            var entry = new AddTitleEntry
             {
                 Id = Guid.NewGuid().ToString("N"),
                 SearchName = searchName ?? string.Empty,
                 SearchYear = searchYear,
                 MediaType = mediaType,
                 CreatedAt = DateTime.UtcNow,
-                State = AddMovieState.Searching,
+                State = AddTitleState.Searching,
             };
 
             lock (Lock)
@@ -182,22 +182,22 @@ namespace ManageComingSoon.Services
         /// [UI] Creates a new manually-confirmed entry using the user's typed
         /// title/year, bypassing provider search.
         /// </summary>
-        public static AddMovieEntry AddManual(string searchName, int? searchYear, ComingSoonMediaType mediaType)
+        public static AddTitleEntry AddManual(string searchName, int? searchYear, ComingSoonMediaType mediaType)
         {
-            var entry = new AddMovieEntry
+            var entry = new AddTitleEntry
             {
                 Id = Guid.NewGuid().ToString("N"),
                 SearchName = searchName ?? string.Empty,
                 SearchYear = searchYear,
                 MediaType = mediaType,
                 CreatedAt = DateTime.UtcNow,
-                State = AddMovieState.Confident,
+                State = AddTitleState.Confident,
                 ConfirmedTmdbId = 0,
                 ConfirmedTitle = searchName ?? string.Empty,
                 ConfirmedYear = searchYear ?? DateTime.UtcNow.Year,
                 ConfirmedOverview = string.Empty,
                 ConfirmedPosterPath = string.Empty,
-                Candidates = new List<AddMovieCandidate>(),
+                Candidates = new List<AddTitleCandidate>(),
             };
 
             lock (Lock)
@@ -219,11 +219,11 @@ namespace ManageComingSoon.Services
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
-                entry.State = AddMovieState.Searching;
+                entry.State = AddTitleState.Searching;
                 entry.ErrorMessage = string.Empty;
-                entry.Candidates = new List<AddMovieCandidate>();
+                entry.Candidates = new List<AddTitleCandidate>();
                 Persist();
             }
 
@@ -231,13 +231,13 @@ namespace ManageComingSoon.Services
         }
 
         /// <summary>[UI] Records a confident TMDB match and transitions to Confident state.</summary>
-        public static void SetConfident(string id, TmdbMovieResult match)
+        public static void SetConfident(string id, TmdbTitleResult match)
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
-                entry.State = AddMovieState.Confident;
+                entry.State = AddTitleState.Confident;
                 entry.HasDestinationConflict = false;
                 entry.ConflictReason = string.Empty;
                 entry.ErrorMessage = string.Empty;
@@ -246,7 +246,7 @@ namespace ManageComingSoon.Services
                 entry.ConfirmedYear = match.ReleaseYear;
                 entry.ConfirmedOverview = match.Overview ?? string.Empty;
                 entry.ConfirmedPosterPath = match.PosterPath ?? string.Empty;
-                entry.Candidates = new List<AddMovieCandidate>();
+                entry.Candidates = new List<AddTitleCandidate>();
                 Persist();
             }
 
@@ -262,13 +262,13 @@ namespace ManageComingSoon.Services
             bool changed = false;
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
-                if (entry.State != AddMovieState.NoResults
-                    && entry.State != AddMovieState.SearchFailed)
+                if (entry.State != AddTitleState.NoResults
+                    && entry.State != AddTitleState.SearchFailed)
                     return;
 
-                entry.State = AddMovieState.Confident;
+                entry.State = AddTitleState.Confident;
                 entry.HasDestinationConflict = false;
                 entry.ConflictReason = string.Empty;
                 entry.ErrorMessage = string.Empty;
@@ -277,7 +277,7 @@ namespace ManageComingSoon.Services
                 entry.ConfirmedYear = entry.SearchYear ?? DateTime.UtcNow.Year;
                 entry.ConfirmedOverview = string.Empty;
                 entry.ConfirmedPosterPath = string.Empty;
-                entry.Candidates = new List<AddMovieCandidate>();
+                entry.Candidates = new List<AddTitleCandidate>();
                 Persist();
                 changed = true;
             }
@@ -286,17 +286,17 @@ namespace ManageComingSoon.Services
         }
 
         /// <summary>[UI] Records multiple TMDB candidates for user selection.</summary>
-        public static void SetMultipleMatches(string id, List<TmdbMovieResult> candidates)
+        public static void SetMultipleMatches(string id, List<TmdbTitleResult> candidates)
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
-                entry.State = AddMovieState.MultipleMatches;
+                entry.State = AddTitleState.MultipleMatches;
                 entry.ErrorMessage = string.Empty;
                 entry.Candidates = candidates
                     .Take(8)
-                    .Select(AddMovieCandidate.FromTmdb)
+                    .Select(AddTitleCandidate.FromTmdb)
                     .ToList();
                 Persist();
             }
@@ -309,11 +309,11 @@ namespace ManageComingSoon.Services
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
-                entry.State = AddMovieState.NoResults;
+                entry.State = AddTitleState.NoResults;
                 entry.ErrorMessage = string.Empty;
-                entry.Candidates = new List<AddMovieCandidate>();
+                entry.Candidates = new List<AddTitleCandidate>();
                 Persist();
             }
 
@@ -325,11 +325,11 @@ namespace ManageComingSoon.Services
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
-                entry.State = AddMovieState.SearchFailed;
+                entry.State = AddTitleState.SearchFailed;
                 entry.ErrorMessage = errorMessage ?? string.Empty;
-                entry.Candidates = new List<AddMovieCandidate>();
+                entry.Candidates = new List<AddTitleCandidate>();
                 Persist();
             }
 
@@ -351,9 +351,9 @@ namespace ManageComingSoon.Services
             bool changed = false;
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
-                if (entry.State != AddMovieState.Confident) return;
+                if (entry.State != AddTitleState.Confident) return;
                 entry.HasDestinationConflict = true;
                 entry.ConflictReason = reason ?? string.Empty;
                 Persist();
@@ -372,9 +372,9 @@ namespace ManageComingSoon.Services
             bool changed = false;
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
-                if (entry.State != AddMovieState.Confident) return;
+                if (entry.State != AddTitleState.Confident) return;
                 if (!entry.HasDestinationConflict) return;
                 entry.HasDestinationConflict = false;
                 entry.ConflictReason = string.Empty;
@@ -399,16 +399,16 @@ namespace ManageComingSoon.Services
             bool changed = false;
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
-                if (entry.State != AddMovieState.Confident
-                    && entry.State != AddMovieState.AddFailed)
+                if (entry.State != AddTitleState.Confident
+                    && entry.State != AddTitleState.AddFailed)
                     return;
 
                 // A conflict should have been resolved before queuing, but guard anyway.
                 if (entry.HasDestinationConflict) return;
 
-                entry.State = AddMovieState.Queued;
+                entry.State = AddTitleState.Queued;
                 entry.HasDestinationConflict = false;
                 entry.ConflictReason = string.Empty;
                 entry.ErrorMessage = string.Empty;
@@ -434,7 +434,7 @@ namespace ManageComingSoon.Services
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
 
                 // Guard against a late/out-of-order caller reverting an entry
@@ -450,7 +450,7 @@ namespace ManageComingSoon.Services
                 // Logging here (with a stack trace) rather than silently
                 // swallowing it means if it still happens, we get proof of
                 // exactly where from, next time it fires.
-                if (entry.State != AddMovieState.Queued && entry.State != AddMovieState.Adding)
+                if (entry.State != AddTitleState.Queued && entry.State != AddTitleState.Adding)
                 {
                     Log?.Warn(
                         "MCS-DIAG SetAdding REJECTED id={0} currentState={1} attemptedStep={2} detail='{3}'\n{4}",
@@ -458,9 +458,9 @@ namespace ManageComingSoon.Services
                     return;
                 }
 
-                bool firstEntry = entry.State == AddMovieState.Queued;
+                bool firstEntry = entry.State == AddTitleState.Queued;
 
-                entry.State = AddMovieState.Adding;
+                entry.State = AddTitleState.Adding;
                 entry.AddingStep = step;
                 entry.AddingDetail = detail ?? string.Empty;
                 entry.ErrorMessage = string.Empty;
@@ -486,16 +486,16 @@ namespace ManageComingSoon.Services
 
         /// <summary>
         /// [UI] Updates the progress percentage on the in-flight Adding entry.
-        /// Called by AddMovieTask on every itemProgress callback.
+        /// Called by AddTitleTask on every itemProgress callback.
         /// Fires OnStateChanged so the progress bar advances in real time.
         /// </summary>
         public static void SetAddingPercent(string id, int percent)
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
-                if (entry.State != AddMovieState.Adding) return;
+                if (entry.State != AddTitleState.Adding) return;
                 entry.AddingPercent = percent;
                 Persist();
             }
@@ -515,9 +515,9 @@ namespace ManageComingSoon.Services
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return null;
-                if (entry.State != AddMovieState.Adding) return null;
+                if (entry.State != AddTitleState.Adding) return null;
                 if (!entry.AddingStartedAt.HasValue) return null;
 
                 var elapsed = DateTime.UtcNow - entry.AddingStartedAt.Value;
@@ -568,15 +568,15 @@ namespace ManageComingSoon.Services
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
 
-                // Guard against a redundant completion. AddMovieTask is now
+                // Guard against a redundant completion. AddTitleTask is now
                 // the sole caller of SetAdded, including for the fast-path-
                 // confirmed case (see NotifyPathConfirmed) — so in normal
                 // operation this guard should never actually reject anything.
                 // Kept as insurance, not as compensation for a known race.
-                if (entry.State != AddMovieState.Adding)
+                if (entry.State != AddTitleState.Adding)
                 {
                     Log?.Warn(
                         "MCS-DIAG SetAdded REJECTED id={0} currentState={1} — already completed by another writer",
@@ -584,7 +584,7 @@ namespace ManageComingSoon.Services
                     return;
                 }
 
-                entry.State = AddMovieState.Added;
+                entry.State = AddTitleState.Added;
                 entry.AddedFolderPath = folderPath ?? string.Empty;
                 entry.CompletedAt = DateTime.UtcNow;
                 entry.ErrorMessage = string.Empty;
@@ -620,14 +620,14 @@ namespace ManageComingSoon.Services
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
 
                 // Same reasoning as SetAdded's guard — a failure arriving
                 // after the item was already completed by a different writer
                 // (or vice versa) must not override the outcome that already
                 // reached the user.
-                if (entry.State != AddMovieState.Adding)
+                if (entry.State != AddTitleState.Adding)
                 {
                     Log?.Warn(
                         "MCS-DIAG SetAddFailed REJECTED id={0} currentState={1} — already resolved by another writer",
@@ -635,7 +635,7 @@ namespace ManageComingSoon.Services
                     return;
                 }
 
-                entry.State = AddMovieState.AddFailed;
+                entry.State = AddTitleState.AddFailed;
                 entry.ErrorMessage = errorMessage ?? string.Empty;
                 entry.AddingStep = 0;
                 entry.AddingDetail = string.Empty;
@@ -653,9 +653,9 @@ namespace ManageComingSoon.Services
         /// <summary>
         /// [signal only] Called by ComingSoonEntryPoint.OnItemAdded when Emby
         /// fires ItemAdded for a path registered by this tracker. Deliberately
-        /// does NOT mutate State — AddMovieTask is the sole writer of terminal
+        /// does NOT mutate State — AddTitleTask is the sole writer of terminal
         /// transitions (SetAdded/SetAddFailed). This only records that Emby
-        /// has confirmed the path and wakes AddMovieTask's fast-path race
+        /// has confirmed the path and wakes AddTitleTask's fast-path race
         /// (via OnStateChanged) so it can stop its own redundant pipeline and
         /// apply the completion itself.
         ///
@@ -674,7 +674,7 @@ namespace ManageComingSoon.Services
             {
                 foreach (var entry in Entries.Values)
                 {
-                    if (entry.State != AddMovieState.Adding) continue;
+                    if (entry.State != AddTitleState.Adding) continue;
                     if (string.IsNullOrEmpty(entry.AddedFolderPath)) continue;
                     if (!folderPath.StartsWith(entry.AddedFolderPath,
                             StringComparison.OrdinalIgnoreCase)) continue;
@@ -685,7 +685,7 @@ namespace ManageComingSoon.Services
                 }
             }
 
-            // Wakes any fast-path race (AddMovieTask) subscribed to this same
+            // Wakes any fast-path race (AddTitleTask) subscribed to this same
             // event — it will re-check IsPathConfirmed and decide for itself
             // whether to act. No state changed here, so nothing to persist.
             if (matched) OnStateChanged?.Invoke();
@@ -693,15 +693,15 @@ namespace ManageComingSoon.Services
 
         /// <summary>
         /// Peek-only: has Emby already confirmed this entry's path? Read by
-        /// AddMovieTask's fast-path race. Does not mutate anything and does
-        /// not "consume" the confirmation — AddMovieTask's own SetAdded call
+        /// AddTitleTask's fast-path race. Does not mutate anything and does
+        /// not "consume" the confirmation — AddTitleTask's own SetAdded call
         /// is what actually applies completion, exactly once, guarded as usual.
         /// </summary>
         public static bool IsPathConfirmed(string id)
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 return Entries.TryGetValue(id, out entry) && entry.PathConfirmedAt.HasValue;
             }
         }
@@ -716,7 +716,7 @@ namespace ManageComingSoon.Services
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
                 entry.AddedFolderPath = folderPath ?? string.Empty;
                 Persist();
@@ -738,7 +738,7 @@ namespace ManageComingSoon.Services
             bool changed = false;
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
                 if (candidateIndex < 0 || candidateIndex >= entry.Candidates.Count) return;
                 entry.Candidates[candidateIndex].CastNames =
@@ -762,7 +762,7 @@ namespace ManageComingSoon.Services
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
                 entry.SearchName = searchName ?? string.Empty;
                 entry.SearchYear = searchYear;
@@ -784,7 +784,7 @@ namespace ManageComingSoon.Services
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 if (!Entries.TryGetValue(id, out entry)) return;
                 entry.IncludedInBulkAdd = included;
                 Persist();
@@ -813,11 +813,11 @@ namespace ManageComingSoon.Services
         // Queries
         // -----------------------------------------------------------------------
 
-        public static AddMovieEntry Get(string id)
+        public static AddTitleEntry Get(string id)
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
+                AddTitleEntry entry;
                 return Entries.TryGetValue(id, out entry) ? entry : null;
             }
         }
@@ -826,14 +826,14 @@ namespace ManageComingSoon.Services
         /// Finds an Adding entry whose AddedFolderPath matches the given item path.
         /// Used by ComingSoonEntryPoint to detect ingest completion.
         /// </summary>
-        public static AddMovieEntry FindAddingByFolderPath(string itemPath)
+        public static AddTitleEntry FindAddingByFolderPath(string itemPath)
         {
             if (string.IsNullOrEmpty(itemPath)) return null;
             lock (Lock)
             {
                 foreach (var entry in Entries.Values.ToArray())
                 {
-                    if (entry.State != AddMovieState.Adding) continue;
+                    if (entry.State != AddTitleState.Adding) continue;
                     if (string.IsNullOrEmpty(entry.AddedFolderPath)) continue;
                     if (itemPath.StartsWith(entry.AddedFolderPath,
                             StringComparison.OrdinalIgnoreCase))
@@ -847,11 +847,11 @@ namespace ManageComingSoon.Services
         /// Returns entries sorted for display:
         /// active rows newest-first, then Added rows newest-completed-first.
         ///
-        /// Returns deep clones, not live references. AddMovieEntry objects are
-        /// mutable and can be written to by AddMovieTask on a background thread
-        /// at any time (State, AddingPercent, AddingDetail, ...). RebuildMovieList
+        /// Returns deep clones, not live references. AddTitleEntry objects are
+        /// mutable and can be written to by AddTitleTask on a background thread
+        /// at any time (State, AddingPercent, AddingDetail, ...). RebuildTitleList
         /// reads several fields off each entry across multiple statements
-        /// (BuildMovieRow in particular) — without cloning, a mutation landing
+        /// (BuildTitleRow in particular) — without cloning, a mutation landing
         /// mid-rebuild produces a torn read: an entry bucketed as "active" on
         /// its old State, but already reset by SetAdded by the time its other
         /// fields are read. Cloning happens here, under Lock, so every caller
@@ -859,35 +859,35 @@ namespace ManageComingSoon.Services
         /// required on their part.
         /// </summary>
         /// <summary>
-        /// Lightweight state check for one entry, used by AddMovieTask to detect
+        /// Lightweight state check for one entry, used by AddTitleTask to detect
         /// when ComingSoonEntryPoint's ItemAdded fast path has already resolved
         /// the item it's still independently polling for — lets it stop that
         /// redundant work immediately instead of running its own wait to
         /// completion regardless. Returns a plain enum value (not a reference),
         /// so there's nothing here that needs cloning for safe reading.
         /// </summary>
-        public static AddMovieState? GetState(string id)
+        public static AddTitleState? GetState(string id)
         {
             lock (Lock)
             {
-                AddMovieEntry entry;
-                return Entries.TryGetValue(id, out entry) ? (AddMovieState?)entry.State : null;
+                AddTitleEntry entry;
+                return Entries.TryGetValue(id, out entry) ? (AddTitleState?)entry.State : null;
             }
         }
 
-        public static AddMovieEntry[] GetAllSorted()
+        public static AddTitleEntry[] GetAllSorted()
         {
             lock (Lock)
             {
                 var snapshot = Entries.Values.Select(e => e.Clone()).ToArray();
 
                 var active = snapshot
-                    .Where(e => e.State != AddMovieState.Added)
+                    .Where(e => e.State != AddTitleState.Added)
                     .OrderByDescending(e => e.CreatedAt)
                     .ToList();
 
                 var completed = snapshot
-                    .Where(e => e.State == AddMovieState.Added)
+                    .Where(e => e.State == AddTitleState.Added)
                     .OrderByDescending(e => e.CompletedAt ?? DateTime.MinValue)
                     .ToList();
 
@@ -909,14 +909,14 @@ namespace ManageComingSoon.Services
         /// Finds an earlier-created entry that would claim the same destination
         /// folder — used for in-list duplicate detection before touching disk.
         /// </summary>
-        public static AddMovieEntry FindEarlierDuplicateDestination(
+        public static AddTitleEntry FindEarlierDuplicateDestination(
             string safeName, string excludeId, DateTime createdAt)
         {
             if (string.IsNullOrEmpty(safeName)) return null;
 
             lock (Lock)
             {
-                AddMovieEntry earliest = null;
+                AddTitleEntry earliest = null;
 
                 foreach (var entry in Entries.Values.ToArray())
                 {

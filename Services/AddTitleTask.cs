@@ -1,10 +1,10 @@
-﻿// ManageComingSoon - Add Movie Task
-// Scheduled task that processes the AddMovieTracker queue serially.
-// Triggered programmatically by AddMoviePageView via ITaskManager.
+// ManageComingSoon - Add Title Task
+// Scheduled task that processes the AddTitleTracker queue serially.
+// Triggered programmatically by AddTitlePageView via ITaskManager.
 //
 // Key design decisions:
 //   • UI updates are fully event-driven — no poll timer.
-//   • AddMovieTracker state methods (SetAdding, SetAddingPercent, SetAdded,
+//   • AddTitleTracker state methods (SetAdding, SetAddingPercent, SetAdded,
 //     SetAddFailed) fire OnItemStateChanged after each mutation. The task
 //     wires OnItemStateChanged in SetDependencies so the correct event fires
 //     without callers having to remember to pair tracker calls with events.
@@ -20,7 +20,7 @@
 //     position only — it advances by exactly one slice per item, reported
 //     right before the item starts and right after it reaches a terminal
 //     state (Added or AddFailed). It has no knowledge of pipeline internals.
-//   • Row UI progress (AddMovieTracker.SetAddingPercent) reflects the
+//   • Row UI progress (AddTitleTracker.SetAddingPercent) reflects the
 //     pipeline's own real milestones (see EmbyLibraryAddService's
 //     AddComingSoonStagePercent: ReadinessCheck 5% / WriteFiles 30% /
 //     RefreshTargetLibrary 40% / ConfirmIngestedAndTagged 95% / Complete
@@ -53,7 +53,7 @@ namespace ManageComingSoon.Services
     using MediaBrowser.Model.Logging;
     using MediaBrowser.Model.Tasks;
 
-    public class AddMovieTask : IScheduledTask, IConfigurableScheduledTask
+    public class AddTitleTask : IScheduledTask, IConfigurableScheduledTask
     {
         private static EmbyLibraryAddService staticLibraryService;
         private static ILogger staticLogger;
@@ -82,13 +82,13 @@ namespace ManageComingSoon.Services
             staticGetCustomStubPath = getCustomStubPath;
 
             // Wire the single tracker delegate to the single task event.
-            // AddMovieTracker fires OnStateChanged from every [UI] mutation method;
+            // AddTitleTracker fires OnStateChanged from every [UI] mutation method;
             // the page view subscribes to StateChanged and calls RebuildAndBroadcast.
-            AddMovieTracker.OnStateChanged = () => StateChanged?.Invoke();
+            AddTitleTracker.OnStateChanged = () => StateChanged?.Invoke();
         }
 
         /// <summary>
-        /// Raised by AddMovieTracker after any [UI] state mutation — the single
+        /// Raised by AddTitleTracker after any [UI] state mutation — the single
         /// event the page view subscribes to for all UI refreshes.
         /// Replaces the previous ItemStarted / ItemProgressChanged / ItemCompleted
         /// trio; the tracker fires it from inside each [UI] method so callers
@@ -96,7 +96,7 @@ namespace ManageComingSoon.Services
         /// </summary>
         public static event Action StateChanged;
 
-        public AddMovieTask() { }
+        public AddTitleTask() { }
 
         private EmbyLibraryAddService LibraryService => staticLibraryService;
         private ILogger Logger => staticLogger;
@@ -104,7 +104,7 @@ namespace ManageComingSoon.Services
         public string Name => "Add Coming Soon Titles";
         public string Description => "Managed by the Manage Coming Soon plugin. Do not schedule manually — trigger via the Add Coming Soon tab only.";
         public string Category => "GinjaNinja Tools";
-        public string Key => "ManageComingSoon_AddMovie";
+        public string Key => "ManageComingSoon_AddTitle";
 
         
 
@@ -134,11 +134,11 @@ namespace ManageComingSoon.Services
 
         public async Task Execute(CancellationToken cancellationToken, IProgress<double> progress)
         {
-            var items = AddMovieTracker.DequeueAllQueued();
+            var items = AddTitleTracker.DequeueAllQueued();
 
             if (items.Length == 0)
             {
-                this.Logger.Info("ManageComingSoon: AddMovieTask started but queue is empty — nothing to do.");
+                this.Logger.Info("ManageComingSoon: AddTitleTask started but queue is empty — nothing to do.");
                 progress.Report(100);
                 return;
             }
@@ -147,10 +147,10 @@ namespace ManageComingSoon.Services
             string customStubPath = staticGetCustomStubPath != null ? staticGetCustomStubPath() : null;
 
             if (string.IsNullOrEmpty(apiKey))
-                this.Logger.Warn("ManageComingSoon: AddMovieTask starting with NO Emby API key — " +
+                this.Logger.Warn("ManageComingSoon: AddTitleTask starting with NO Emby API key — " +
                     "every item will fail at the library-refresh stage. Set it on the Configuration tab.");
 
-            this.Logger.Info("ManageComingSoon: AddMovieTask starting — {0} item(s) to process.", items.Length);
+            this.Logger.Info("ManageComingSoon: AddTitleTask starting — {0} item(s) to process.", items.Length);
 
             int successCount = 0;
             int failCount = 0;
@@ -160,7 +160,7 @@ namespace ManageComingSoon.Services
                 if (cancellationToken.IsCancellationRequested)
                 {
                     this.Logger.Warn(
-                        "ManageComingSoon: AddMovieTask cancelled — {0} item(s) remaining left Queued for resume.",
+                        "ManageComingSoon: AddTitleTask cancelled — {0} item(s) remaining left Queued for resume.",
                         items.Length - i);
                     break;
                 }
@@ -172,12 +172,12 @@ namespace ManageComingSoon.Services
                 double sliceStart = (double)itemIndex / items.Length * 100.0;
                 double sliceSize = 100.0 / items.Length;
 
-                this.Logger.Info("ManageComingSoon: AddMovieTask processing [{0}/{1}] '{2}'",
-                    itemIndex + 1, items.Length, item.ConfirmedTitle);
+                this.Logger.Info("ManageComingSoon: AddTitleTask processing {0} [{1}/{2}] '{3}'",
+                    item.MediaType.DisplayName(), itemIndex + 1, items.Length, item.ConfirmedTitle);
 
                 if (string.IsNullOrEmpty(targetPath))
                 {
-                    AddMovieTracker.SetAddFailed(item.Id,
+                    AddTitleTracker.SetAddFailed(item.Id,
                         "No " + item.MediaType.DisplayName() + " Coming Soon path is configured.");
                     failCount++;
                     continue;
@@ -195,13 +195,13 @@ namespace ManageComingSoon.Services
                 // milliseconds of each other) each still get a render frame,
                 // without taxing every item a flat delay regardless of real work.
                 ThrottlePush();
-                AddMovieTracker.SetAdding(item.Id, AddMovieTracker.StepWritingFiles,
+                AddTitleTracker.SetAdding(item.Id, AddTitleTracker.StepWritingFiles,
                     "Writing folder and stub file\u2026");
 
                 DateTime itemStart = DateTime.UtcNow;
 
                 // Races the pipeline against ComingSoonEntryPoint's ItemAdded
-                // fast path (see AddMovieTracker.NotifyPathConfirmed). Both are
+                // fast path (see AddTitleTracker.NotifyPathConfirmed). Both are
                 // legitimate, independent observers of the same real-world
                 // event — whichever confirms first wins, and the other stops
                 // rather than duplicating work neither the user nor the
@@ -223,35 +223,35 @@ namespace ManageComingSoon.Services
                     {
                         if (itemCts.IsCancellationRequested) return;
                         ThrottlePush();
-                        AddMovieTracker.SetAddingPercent(item.Id, (int)p);
+                        AddTitleTracker.SetAddingPercent(item.Id, (int)p);
                     });
 
                     Action<string> onStatus = msg =>
                     {
                         if (itemCts.IsCancellationRequested) return;
                         ThrottlePush();
-                        AddMovieTracker.SetAdding(item.Id, AddMovieTracker.StepAwaitingIngest, msg);
+                        AddTitleTracker.SetAdding(item.Id, AddTitleTracker.StepAwaitingIngest, msg);
                     };
 
-                    // Watches AddMovieTracker.IsPathConfirmed rather than State —
+                    // Watches AddTitleTracker.IsPathConfirmed rather than State —
                     // ComingSoonEntryPoint only signals confirmation now, it no
-                    // longer mutates State itself. AddMovieTask is the sole
+                    // longer mutates State itself. AddTitleTask is the sole
                     // writer of terminal transitions; this just tells it when
                     // it's safe to stop its own pipeline and apply completion.
                     Action checkFastPath = () =>
                     {
-                        if (AddMovieTracker.IsPathConfirmed(item.Id))
+                        if (AddTitleTracker.IsPathConfirmed(item.Id))
                             fastPathTcs.TrySetResult(true);
                     };
 
-                    AddMovieTracker.OnStateChanged += checkFastPath;
+                    AddTitleTracker.OnStateChanged += checkFastPath;
                     try
                     {
                         // Covers the case where the fast path already landed
                         // between SetAdding above and subscribing here.
                         checkFastPath();
 
-                        var movie = new ManageComingSoon.Model.TmdbMovieResult
+                        var title = new ManageComingSoon.Model.TmdbTitleResult
                         {
                             MediaType = item.MediaType,
                             Id = item.ConfirmedTmdbId,
@@ -264,7 +264,7 @@ namespace ManageComingSoon.Services
                         };
 
                         var pipelineTask = this.LibraryService.AddComingSoonPipelineAsync(
-                            movie, item.MediaType, targetPath, customStubPath, apiKey,
+                            title, item.MediaType, targetPath, customStubPath, apiKey,
                             itemProgress, onStatus, itemCts.Token);
 
                         var winner = await Task.WhenAny(pipelineTask, fastPathTcs.Task)
@@ -282,13 +282,13 @@ namespace ManageComingSoon.Services
                             {
                                 if (t.IsFaulted)
                                     this.Logger.Warn(
-                                        "ManageComingSoon: AddMovieTask [{0}/{1}] '{2}' — pipeline raised after fast-path short-circuit (harmless): {3}",
+                                        "ManageComingSoon: AddTitleTask [{0}/{1}] '{2}' — pipeline raised after fast-path short-circuit (harmless): {3}",
                                         itemIndex + 1, items.Length, item.ConfirmedTitle,
                                         t.Exception.GetBaseException().Message);
                             }, TaskScheduler.Default);
 
                             // ComingSoonEntryPoint only signaled confirmation —
-                            // it never touched State. AddMovieTask applies the
+                            // it never touched State. AddTitleTask applies the
                             // actual completion here, exactly as it would if
                             // its own pipeline had won instead. This is the
                             // only call to SetAdded for the fast-path-win case;
@@ -301,9 +301,9 @@ namespace ManageComingSoon.Services
                             // which is the same value for every item in this
                             // run and would be wrong here.
                             ThrottlePush();
-                            AddMovieTracker.SetAdded(item.Id, item.AddedFolderPath);
+                            AddTitleTracker.SetAdded(item.Id, item.AddedFolderPath);
                             this.Logger.Info(
-                                "ManageComingSoon: AddMovieTask [{0}/{1}] '{2}' — path confirmed by ComingSoonEntryPoint; applying completion.",
+                                "ManageComingSoon: AddTitleTask [{0}/{1}] '{2}' — path confirmed by ComingSoonEntryPoint; applying completion.",
                                 itemIndex + 1, items.Length, item.ConfirmedTitle);
                             successCount++;
 
@@ -316,7 +316,7 @@ namespace ManageComingSoon.Services
                             // Record folder path before transitioning state so that
                             // ComingSoonEntryPoint.OnItemAdded can match the path if
                             // it fires asynchronously on a parallel thread.
-                            AddMovieTracker.RecordFolderPath(item.Id, result.FolderPath);
+                            AddTitleTracker.RecordFolderPath(item.Id, result.FolderPath);
 
                             // The row reaching its terminal state and the admin tick
                             // advancing are the same event — reported back to back,
@@ -327,20 +327,20 @@ namespace ManageComingSoon.Services
                             if (result.Success)
                             {
                                 ThrottlePush();
-                                AddMovieTracker.SetAdded(item.Id, result.FolderPath);
+                                AddTitleTracker.SetAdded(item.Id, result.FolderPath);
                                 this.Logger.Info(
-                                    "ManageComingSoon: AddMovieTask [{0}/{1}] '{2}' — succeeded.",
+                                    "ManageComingSoon: AddTitleTask [{0}/{1}] '{2}' — succeeded.",
                                     itemIndex + 1, items.Length, item.ConfirmedTitle);
                                 successCount++;
                             }
                             else
                             {
                                 ThrottlePush();
-                                AddMovieTracker.SetAddFailed(item.Id,
+                                AddTitleTracker.SetAddFailed(item.Id,
                                     string.Format("Add failed ({0}): {1}",
                                         result.FailedAtStage, result.FailureReason));
                                 this.Logger.Warn(
-                                    "ManageComingSoon: AddMovieTask [{0}/{1}] '{2}' — failed at stage {3}: {4}",
+                                    "ManageComingSoon: AddTitleTask [{0}/{1}] '{2}' — failed at stage {3}: {4}",
                                     itemIndex + 1, items.Length, item.ConfirmedTitle,
                                     result.FailedAtStage, result.FailureReason);
                                 failCount++;
@@ -351,12 +351,12 @@ namespace ManageComingSoon.Services
                     catch (OperationCanceledException)
                     {
                         this.Logger.Warn(
-                            "ManageComingSoon: AddMovieTask [{0}/{1}] '{2}' — cancelled mid-pipeline; re-queued.",
+                            "ManageComingSoon: AddTitleTask [{0}/{1}] '{2}' — cancelled mid-pipeline; re-queued.",
                             itemIndex + 1, items.Length, item.ConfirmedTitle);
                         // SetQueued only accepts Confident/AddFailed — go via
                         // AddFailed to satisfy the guard, then immediately re-queue.
-                        AddMovieTracker.SetAddFailed(item.Id, "Cancelled — will resume on next Add All.");
-                        AddMovieTracker.SetQueued(item.Id);
+                        AddTitleTracker.SetAddFailed(item.Id, "Cancelled — will resume on next Add All.");
+                        AddTitleTracker.SetQueued(item.Id);
                         // No admin tick — the item isn't terminal, it's back in
                         // the queue for the next Add All run.
                         break;
@@ -364,9 +364,9 @@ namespace ManageComingSoon.Services
                     catch (Exception ex)
                     {
                         this.Logger.ErrorException(
-                            "ManageComingSoon: AddMovieTask [{0}/{1}] '{2}' — unexpected exception",
+                            "ManageComingSoon: AddTitleTask [{0}/{1}] '{2}' — unexpected exception",
                             ex, itemIndex + 1, items.Length, item.ConfirmedTitle);
-                        AddMovieTracker.SetAddFailed(item.Id,
+                        AddTitleTracker.SetAddFailed(item.Id,
                             string.Format("Add failed: {0} — see server log", ex.Message));
                         failCount++;
                         // Still a terminal state for this item — tick the admin
@@ -376,11 +376,11 @@ namespace ManageComingSoon.Services
                     finally
                     {
                         // Critical: without this, every item leaks a handler
-                        // onto AddMovieTracker's static OnStateChanged event —
+                        // onto AddTitleTracker's static OnStateChanged event —
                         // by the end of a long queue, or across repeated runs,
                         // every past item's stale checkFastPath would still be
                         // firing on every future state change.
-                        AddMovieTracker.OnStateChanged -= checkFastPath;
+                        AddTitleTracker.OnStateChanged -= checkFastPath;
                     }
                 } // end using (itemCts)
 
@@ -393,7 +393,7 @@ namespace ManageComingSoon.Services
                     {
                         var waitFor = minGap - elapsed;
                         this.Logger.Info(
-                            "ManageComingSoon: AddMovieTask [{0}/{1}] '{2}' completed in {3:0}ms — " +
+                            "ManageComingSoon: AddTitleTask [{0}/{1}] '{2}' completed in {3:0}ms — " +
                             "holding {4:0}ms before starting next item (MinGapBetweenItemsSeconds={5}s floor).",
                             itemIndex + 1, items.Length, item.ConfirmedTitle,
                             elapsed.TotalMilliseconds, waitFor.TotalMilliseconds, MinGapBetweenItemsSeconds);
@@ -412,7 +412,7 @@ namespace ManageComingSoon.Services
 
             progress.Report(100);
             this.Logger.Info(
-                "ManageComingSoon: AddMovieTask complete — {0} succeeded, {1} failed.",
+                "ManageComingSoon: AddTitleTask complete — {0} succeeded, {1} failed.",
                 successCount, failCount);
 
             // Fire a single Default refresh on the library after all items are
@@ -429,7 +429,7 @@ namespace ManageComingSoon.Services
                     if (!string.IsNullOrEmpty(apiKeyForRefresh))
                     {
                         var http = await this.LibraryService.ResolveHttpAsync(
-                            apiKeyForRefresh, "AddMovieTask/PostQueueRefresh",
+                            apiKeyForRefresh, "AddTitleTask/PostQueueRefresh",
                             CancellationToken.None).ConfigureAwait(false);
 
                         if (http != null)
@@ -448,11 +448,11 @@ namespace ManageComingSoon.Services
                                     library.InternalId,
                                     mediaType.DisplayName() + " Library (Coming Soon, post-queue metadata)",
                                     apiKeyForRefresh, MetadataRefreshMode.FullRefresh,
-                                    "AddMovieTask/PostQueueRefresh",
+                                    "AddTitleTask/PostQueueRefresh",
                                     CancellationToken.None).ConfigureAwait(false);
 
                                 this.Logger.Info(
-                                    "ManageComingSoon: AddMovieTask post-queue FullRefresh fired on {0} library InternalId={1}.",
+                                    "ManageComingSoon: AddTitleTask post-queue FullRefresh fired on {0} library InternalId={1}.",
                                     mediaType.DisplayName(), library.InternalId);
                             }
                         }
@@ -461,7 +461,7 @@ namespace ManageComingSoon.Services
                 catch (Exception ex)
                 {
                     this.Logger.Warn(
-                        "ManageComingSoon: AddMovieTask post-queue refresh failed (non-fatal — " +
+                        "ManageComingSoon: AddTitleTask post-queue refresh failed (non-fatal — " +
                         "metadata will appear on the next scheduled scan): {0}", ex.Message);
                 }
             }

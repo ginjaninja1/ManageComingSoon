@@ -16,11 +16,11 @@
 //   MakeLivePageView.Polling.cs    - StartPollTimer/StopPollTimer/PollProgress/
 //                                     BuildPollSignature.
 //
-//   MakeLivePageView.Rebuild.cs    - RebuildMovieList and the overall status
+//   MakeLivePageView.Rebuild.cs    - RebuildTitleList and the overall status
 //                                     footer (UpdateOverallStatus/SetOverallStatus).
 //
 //   MakeLivePageView.RowBuilders.cs - BuildActiveTrackerRow, BuildQueuedRow,
-//                                     BuildHistoryRow, BuildMovieRow, and all
+//                                     BuildHistoryRow, BuildTitleRow, and all
 //                                     state -> (icon/status/text) helpers.
 //
 // Poll timer runs while the MakeLiveTask is executing OR tracker rows are
@@ -69,7 +69,7 @@ namespace ManageComingSoon.UI.MakeLive
         private readonly MigrationAnalyzer analyzer;
 
         // Signature of all tracker entries (State, Percent, Message) as of the
-        // last UI push from PollProgress — identical to AddMoviePageView's pattern
+        // last UI push from PollProgress — identical to AddTitlePageView's pattern
         // for avoiding unnecessary pushes that would stomp in-progress UI state.
         private string lastPolledSignature = string.Empty;
 
@@ -96,7 +96,7 @@ namespace ManageComingSoon.UI.MakeLive
             MakeLiveTask.ItemCompleted += OnMakeLiveItemCompleted;
 
             LoadAndAnalyse();
-            RebuildMovieList();
+            RebuildTitleList();
 
             var runningWorker = GetMakeLiveWorker();
             if ((runningWorker != null && runningWorker.State == TaskState.Running)
@@ -131,7 +131,7 @@ namespace ManageComingSoon.UI.MakeLive
         private void OnMakeLiveItemCompleted()
         {
             if (this.disposed) return;
-            RebuildMovieList();
+            RebuildTitleList();
             RaiseUIViewInfoChanged();
         }
 
@@ -162,7 +162,7 @@ namespace ManageComingSoon.UI.MakeLive
 
             MakeLiveTracker.ClearCurrentRun();
             LoadAndAnalyse();
-            RebuildMovieList(preserveStatus: true);
+            RebuildTitleList(preserveStatus: true);
             RaiseUIViewInfoChanged();
         }
     }

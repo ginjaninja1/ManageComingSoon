@@ -1,10 +1,10 @@
 // ManageComingSoon - Add Movie Page View [Polling]
 // Background poll timer (StartPollTimer / StopPollTimer / OnPollTick /
 // BuildPollSignature) and the destination-conflict checks it drives.
-// See AddMoviePageView.cs for the full file map.
+// See AddTitlePageView.cs for the full file map.
 //
 // Destination conflict change: DestinationConflict is no longer a separate
-// state. CheckDestinationForEntry calls AddMovieTracker.SetConflict /
+// state. CheckDestinationForEntry calls AddTitleTracker.SetConflict /
 // ClearConflict, which annotate a Confident entry with HasDestinationConflict
 // and ConflictReason without changing its state. The guard at the top of
 // CheckDestinationForEntry therefore checks entry.State == Confident only
@@ -24,7 +24,7 @@
 // and applying them inside RebuildAndBroadcast's lock) would be more rigorous
 // but is deferred given the guard already in place.
 
-namespace ManageComingSoon.UI.AddMovie
+namespace ManageComingSoon.UI.AddTitle
 {
     using Emby.Web.GenericEdit.Elements;
     using Emby.Web.GenericEdit.Elements.List;
@@ -44,7 +44,7 @@ namespace ManageComingSoon.UI.AddMovie
     using System.Threading;
     using System.Threading.Tasks;
 
-    internal partial class AddMoviePageView : PluginPageView, IDisposable
+    internal partial class AddTitlePageView : PluginPageView, IDisposable
     {
         // -----------------------------------------------------------------------
         // Destination conflict check
@@ -57,8 +57,8 @@ namespace ManageComingSoon.UI.AddMovie
         /// </summary>
         private bool CheckDestinationForEntry(string id)
         {
-            var entry = AddMovieTracker.Get(id);
-            if (entry == null || entry.State != AddMovieState.Confident) return false;
+            var entry = AddTitleTracker.Get(id);
+            if (entry == null || entry.State != AddTitleState.Confident) return false;
 
             string targetPath = ConfigurationPageView.PathFromKey(
                 GetComingSoonTargetKey(entry.MediaType));
@@ -71,13 +71,13 @@ namespace ManageComingSoon.UI.AddMovie
             bool conflict = false;
             string reason = string.Empty;
 
-            var duplicate = AddMovieTracker.FindEarlierDuplicateDestination(
+            var duplicate = AddTitleTracker.FindEarlierDuplicateDestination(
                 safeName, id, entry.CreatedAt);
 
             if (duplicate != null)
             {
                 conflict = true;
-                reason = "Movie already in list";
+                reason = entry.MediaType.DisplayName() + " already in list";
             }
             else
             {
@@ -100,13 +100,13 @@ namespace ManageComingSoon.UI.AddMovie
 
             if (conflict && !entry.HasDestinationConflict)
             {
-                AddMovieTracker.SetConflict(id, reason);
+                AddTitleTracker.SetConflict(id, reason);
                 return true;
             }
 
             if (!conflict && entry.HasDestinationConflict)
             {
-                AddMovieTracker.ClearConflict(id);
+                AddTitleTracker.ClearConflict(id);
                 return true;
             }
 
@@ -120,9 +120,9 @@ namespace ManageComingSoon.UI.AddMovie
         private bool CheckAllDestinations()
         {
             bool anyChanged = false;
-            foreach (var entry in AddMovieTracker.GetAllSorted())
+            foreach (var entry in AddTitleTracker.GetAllSorted())
             {
-                if (entry.State == AddMovieState.Confident)
+                if (entry.State == AddTitleState.Confident)
                     if (CheckDestinationForEntry(entry.Id))
                         anyChanged = true;
             }
@@ -174,7 +174,7 @@ namespace ManageComingSoon.UI.AddMovie
                     RequestUiRefresh();
                 }
 
-                if (!AddMovieTracker.AnyInFlight() && !AddMovieTracker.AnyNeedingPoll())
+                if (!AddTitleTracker.AnyInFlight() && !AddTitleTracker.AnyNeedingPoll())
                     StopPollTimer();
             }
             catch (Exception ex)
@@ -193,7 +193,7 @@ namespace ManageComingSoon.UI.AddMovie
         private static string BuildPollSignature()
         {
             var sb = new System.Text.StringBuilder();
-            foreach (var e in AddMovieTracker.GetAllSorted())
+            foreach (var e in AddTitleTracker.GetAllSorted())
             {
                 sb.Append(e.Id).Append(':')
                   .Append((int)e.State).Append(':')

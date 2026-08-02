@@ -4,12 +4,12 @@
 // This is the correct pattern — tagging inline during a scan risks being
 // overwritten by Emby's own post-ingest metadata pass.
 //
-// Also notifies AddMovieTracker (via NotifyPathConfirmed) when an Add Coming
+// Also notifies AddTitleTracker (via NotifyPathConfirmed) when an Add Coming
 // Soon ingest completes. This is a signal only — it does NOT mutate the
-// entry's State. AddMovieTracker.NotifyPathConfirmed doc comment explains
-// why: AddMovieTask is the sole writer of terminal transitions (SetAdded/
+// entry's State. AddTitleTracker.NotifyPathConfirmed doc comment explains
+// why: AddTitleTask is the sole writer of terminal transitions (SetAdded/
 // SetAddFailed), so this class never has direct write access to State. It
-// races against AddMovieTask's own pipeline and applies completion itself,
+// races against AddTitleTask's own pipeline and applies completion itself,
 // whichever confirms first.
 
 namespace ManageComingSoon
@@ -76,9 +76,9 @@ namespace ManageComingSoon
             {
                 this.logger.Info("ManageComingSoon: Initializing persistence stores on startup...");
 
-                // 1. Initialize AddMovie Store & Tracker
-                var addMovieStore = new AddMovieStore(this.appHost, this.logger);
-                AddMovieTracker.Initialise(addMovieStore);
+                // 1. Initialize AddTitle Store & Tracker
+                var addTitleStore = new AddTitleStore(this.appHost, this.logger);
+                AddTitleTracker.Initialise(addTitleStore);
 
                 // 2. Initialize MakeLive Store & Tracker
                 var makeLiveStore = new MakeLiveStore(this.appHost, this.logger);
@@ -103,7 +103,7 @@ namespace ManageComingSoon
             this.libraryManager.ItemAdded -= OnItemAdded;
 
             // Signal trackers to stop persisting during server shutdown
-            AddMovieTracker.Shutdown();
+            AddTitleTracker.Shutdown();
             MakeLiveTracker.Shutdown(); // Cleanly added shutdown hook
 
             var active = MakeLiveTracker.GetActive();
@@ -233,23 +233,23 @@ namespace ManageComingSoon
                 }
 
                 // ---------------------------------------------------------------
-                // Check 3: Notify AddMovieTracker that Emby confirmed this path.
+                // Check 3: Notify AddTitleTracker that Emby confirmed this path.
                 // This is a signal only — it does NOT mark the entry Added.
-                // AddMovieTask remains the sole writer of terminal transitions;
+                // AddTitleTask remains the sole writer of terminal transitions;
                 // it watches this signal via a fast-path race against its own
                 // pipeline and applies SetAdded itself, whichever wins. This is
                 // independent of the tag application above — both always run.
                 // ---------------------------------------------------------------
                 var addEntry = matchedMediaType == ComingSoonMediaType.Movie
-                    ? ManageComingSoon.Services.AddMovieTracker.FindAddingByFolderPath(matchedPath)
+                    ? ManageComingSoon.Services.AddTitleTracker.FindAddingByFolderPath(matchedPath)
                     : null;
 
                 if (addEntry != null)
                 {
                     this.logger.Info(
-                        "ManageComingSoon: ItemAdded for '{0}' matches AddMovieTracker entry '{1}' – notifying AddMovieTask",
+                        "ManageComingSoon: ItemAdded for '{0}' matches AddTitleTracker entry '{1}' – notifying AddTitleTask",
                         item.Name, addEntry.Id);
-                    ManageComingSoon.Services.AddMovieTracker.NotifyPathConfirmed(matchedPath);
+                    ManageComingSoon.Services.AddTitleTracker.NotifyPathConfirmed(matchedPath);
                 }
 
                 // Remove from pending — successfully handled
