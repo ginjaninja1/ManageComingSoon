@@ -453,7 +453,7 @@ namespace ManageComingSoon.Services
                 if (entry.State != AddTitleState.Queued && entry.State != AddTitleState.Adding)
                 {
                     Log?.Warn(
-                        "[ManageComingSoon][StateGuard] SetAdding REJECTED id={0} currentState={1} attemptedStep={2} detail='{3}'\n{4}",
+                        "[StateGuard] SetAdding REJECTED id={0} currentState={1} attemptedStep={2} detail='{3}'\n{4}",
                         id, entry.State, step, detail, Environment.StackTrace);
                     return;
                 }
@@ -540,7 +540,7 @@ namespace ManageComingSoon.Services
                 try { action(); }
                 catch (Exception ex)
                 {
-                    Log?.Warn("[ManageComingSoon][StateGuard] Deferred completion threw: {0}", ex);
+                    Log?.Warn("[StateGuard] Deferred completion threw: {0}", ex);
                 }
             }, TaskScheduler.Default);
         }
@@ -579,7 +579,7 @@ namespace ManageComingSoon.Services
                 if (entry.State != AddTitleState.Adding)
                 {
                     Log?.Warn(
-                        "[ManageComingSoon][StateGuard] SetAdded REJECTED id={0} currentState={1} — already completed by another writer",
+                        "[StateGuard] SetAdded REJECTED id={0} currentState={1} — already completed by another writer",
                         id, entry.State);
                     return;
                 }
@@ -630,7 +630,7 @@ namespace ManageComingSoon.Services
                 if (entry.State != AddTitleState.Adding)
                 {
                     Log?.Warn(
-                        "[ManageComingSoon][StateGuard] SetAddFailed REJECTED id={0} currentState={1} — already resolved by another writer",
+                        "[StateGuard] SetAddFailed REJECTED id={0} currentState={1} — already resolved by another writer",
                         id, entry.State);
                     return;
                 }

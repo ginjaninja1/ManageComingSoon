@@ -92,7 +92,7 @@ namespace ManageComingSoon.UI.AddTitle
                 catch (Exception ex)
                 {
                     this.logger.Warn(
-                        "[ManageComingSoon][DestinationCheck]" + UserTag() + " Destination check failed for '{0}': {1}",
+                        "[DestinationCheck]" + UserTag() + " Destination check failed for '{0}': {1}",
                         entry.ConfirmedTitle, ex.Message);
                     return false;
                 }
@@ -179,7 +179,7 @@ namespace ManageComingSoon.UI.AddTitle
             }
             catch (Exception ex)
             {
-                try { this.logger.ErrorException("[ManageComingSoon][Polling]" + UserTag() + " OnPollTick error", ex); }
+                try { this.logger.ErrorException("[Polling]" + UserTag() + " OnPollTick error", ex); }
                 catch { }
             }
         }

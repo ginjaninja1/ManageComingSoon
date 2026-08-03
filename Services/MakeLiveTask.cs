@@ -64,7 +64,7 @@ namespace ManageComingSoon.Services
 
             if (items.Length == 0)
             {
-                this.Logger.Info("ManageComingSoon: MakeLiveTask started but queue is empty – nothing to do.");
+                this.Logger.Info("MakeLiveTask started but queue is empty – nothing to do.");
                 progress.Report(100);
                 return;
             }
@@ -72,17 +72,17 @@ namespace ManageComingSoon.Services
             string apiKey = staticGetApiKey != null ? staticGetApiKey() : null;
             if (string.IsNullOrEmpty(apiKey))
             {
-                this.Logger.Warn("ManageComingSoon: MakeLiveTask starting with NO Emby API key configured – " +
+                this.Logger.Warn("MakeLiveTask starting with NO Emby API key configured – " +
                     "every item in this run will fail at the library-refresh stage. Set it on the Configuration tab.");
             }
 
             int maxStubFileSizeMb = staticGetMaxStubFileSizeMb != null ? staticGetMaxStubFileSizeMb() : 100;
             bool unlockTags = staticGetUnlockTags != null && staticGetUnlockTags();
             this.Logger.Debug(
-                "ManageComingSoon: MakeLiveTask config read – maxStubFileSizeMb={0}, unlockTags={1}.",
+                "MakeLiveTask config read – maxStubFileSizeMb={0}, unlockTags={1}.",
                 maxStubFileSizeMb, unlockTags);
 
-            this.Logger.Info("ManageComingSoon: MakeLiveTask starting – {0} item(s) to process.", items.Length);
+            this.Logger.Info("MakeLiveTask starting – {0} item(s) to process.", items.Length);
 
             int successCount = 0;
             int failCount = 0;
@@ -92,7 +92,7 @@ namespace ManageComingSoon.Services
                 if (cancellationToken.IsCancellationRequested)
                 {
                     this.Logger.Warn(
-                        "ManageComingSoon: MakeLiveTask cancelled – {0} item(s) remaining in queue were skipped.",
+                        "MakeLiveTask cancelled – {0} item(s) remaining in queue were skipped.",
                         items.Length - i);
 
                     for (int k = i; k < items.Length; k++)
@@ -109,7 +109,7 @@ namespace ManageComingSoon.Services
                 progress.Report(pct);
 
                 string batchTag = items.Length > 1 ? string.Format("[{0}/{1}]", i + 1, items.Length) : null;
-                this.Logger.Info("ManageComingSoon: MakeLiveTask processing {0} '{1}'",
+                this.Logger.Info("MakeLiveTask processing {0} '{1}'",
                     batchTag ?? "[1/1]", item.ItemName);
 
                 MakeLiveTracker.Register(item.FolderPath, item.ItemName, item.Year, item.MediaType);
@@ -117,7 +117,7 @@ namespace ManageComingSoon.Services
                 if (!MakeLiveTracker.IsInFlight(item.FolderPath))
                 {
                     this.Logger.Info(
-                        "ManageComingSoon: MakeLiveTask {0} '{1}' — skipped (removed from queue by user).",
+                        "MakeLiveTask {0} '{1}' — skipped (removed from queue by user).",
                         batchTag ?? "[1/1]", item.ItemName);
                     continue;
                 }
@@ -172,7 +172,7 @@ namespace ManageComingSoon.Services
                             : string.Format("Failed ({0}): {1}", result.FailedAtStage, result.FailureReason);
 
                         this.Logger.Warn(
-                            "ManageComingSoon: MakeLiveTask pipeline failed for {0} '{1}'{2}: {3}",
+                            "MakeLiveTask pipeline failed for {0} '{1}'{2}: {3}",
                             batchTag ?? "[1/1]", item.ItemName,
                             result.IsHardStop ? " [HARD STOP]" : string.Format(" at stage {0}", result.FailedAtStage),
                             result.IsHardStop ? "Insufficient disk space" : result.FailureReason);
@@ -187,7 +187,7 @@ namespace ManageComingSoon.Services
                             if (remaining > 0)
                             {
                                 this.Logger.Warn(
-                                    "ManageComingSoon: MakeLiveTask hard stop — reverting {0} unstarted item(s) to Pending.",
+                                    "MakeLiveTask hard stop — reverting {0} unstarted item(s) to Pending.",
                                     remaining);
                                 for (int k = i + 1; k < items.Length; k++)
                                     MakeLiveTracker.RevertQueuedToPending(items[k].FolderPath);
@@ -199,7 +199,7 @@ namespace ManageComingSoon.Services
                 catch (Exception ex)
                 {
                     this.Logger.ErrorException(
-                        "ManageComingSoon: MakeLiveTask unexpected exception for {0} '{1}'",
+                        "MakeLiveTask unexpected exception for {0} '{1}'",
                         ex, batchTag ?? "[1/1]", item.ItemName);
                     MakeLiveTracker.SetFailed(
                         item.FolderPath,
@@ -211,7 +211,7 @@ namespace ManageComingSoon.Services
 
             progress.Report(100);
             this.Logger.Info(
-                "ManageComingSoon: MakeLiveTask complete – {0} succeeded, {1} failed.",
+                "MakeLiveTask complete – {0} succeeded, {1} failed.",
                 successCount, failCount);
         }
 
@@ -234,7 +234,7 @@ namespace ManageComingSoon.Services
                 if (!stillPresent)
                 {
                     this.Logger.Debug(
-                        "ManageComingSoon: Tag removal confirmed for '{0}' after {1} poll(s).",
+                        "Tag removal confirmed for '{0}' after {1} poll(s).",
                         folderPath, attempt + 1);
                     return;
                 }
@@ -243,7 +243,7 @@ namespace ManageComingSoon.Services
             }
 
             this.Logger.Warn(
-                "ManageComingSoon: Tag removal not confirmed for '{0}' after {1}ms — proceeding anyway.",
+                "Tag removal not confirmed for '{0}' after {1}ms — proceeding anyway.",
                 folderPath, maxAttempts * delayMs);
         }
     }

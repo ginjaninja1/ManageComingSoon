@@ -6,16 +6,18 @@
 // properties case-insensitively, so release_date -> ReleaseDate etc).
 namespace ManageComingSoon.Services
 {
+    using ManageComingSoon.Model;
+    using MediaBrowser.Common.Net;
+    using MediaBrowser.Model.Logging;
+    using MediaBrowser.Model.Serialization;
     using System;
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
-    using ManageComingSoon.Model;
-    using MediaBrowser.Common.Net;
-    using MediaBrowser.Model.Logging;
-    using MediaBrowser.Model.Serialization;
+    using System.Net;
+    using MediaBrowser.Model.Net;
 
     public class TmdbService
     {
@@ -155,7 +157,7 @@ namespace ManageComingSoon.Services
             catch (Exception ex)
             {
                 this.logger.ErrorException(
-                    "[ManageComingSoon][Tmdb] Failed to parse TMDB movie details for {0}", ex, tmdbId);
+                    "[Tmdb] Failed to parse TMDB movie details for {0}", ex, tmdbId);
                 return null;
             }
         }
@@ -188,7 +190,7 @@ namespace ManageComingSoon.Services
             catch (Exception ex)
             {
                 this.logger.ErrorException(
-                    "[ManageComingSoon][Tmdb] Failed to parse TMDB credits for movie {0}", ex, tmdbId);
+                    "[Tmdb] Failed to parse TMDB credits for movie {0}", ex, tmdbId);
                 return new List<string>();
             }
         }
@@ -224,7 +226,7 @@ namespace ManageComingSoon.Services
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("[ManageComingSoon][Tmdb] Failed to parse TMDB search response", ex);
+                this.logger.ErrorException("[Tmdb] Failed to parse TMDB search response", ex);
                 return new List<TmdbTitleResult>();
             }
         }
@@ -235,7 +237,7 @@ namespace ManageComingSoon.Services
             string url = string.Format("{0}/{1}/{2}/alternative_titles?api_key={3}",
                 BaseUrl, mediaType.TmdbPathSegment(), movieId, Uri.EscapeDataString(apiKey));
 
-            string raw = await FetchStringAsync(url, token).ConfigureAwait(false);
+            string raw = await FetchStringAsync(url, token, suppressNotFoundLogging: true).ConfigureAwait(false);
             if (string.IsNullOrEmpty(raw)) return new List<string>();
 
             try
@@ -256,7 +258,7 @@ namespace ManageComingSoon.Services
             }
         }
 
-        private async Task<string> FetchStringAsync(string url, CancellationToken token)
+        private async Task<string> FetchStringAsync(string url, CancellationToken token, bool suppressNotFoundLogging = false)
         {
             try
             {
@@ -275,9 +277,21 @@ namespace ManageComingSoon.Services
                     return await reader.ReadToEndAsync().ConfigureAwait(false);
                 }
             }
+            catch (HttpException httpEx) when (
+                suppressNotFoundLogging &&
+                httpEx.StatusCode.HasValue &&
+                httpEx.StatusCode.Value == HttpStatusCode.NotFound)
+            {
+                // TMDB returns 404 (rather than 200 + empty list) for some titles
+                // that simply have no alternative_titles record. This is expected
+                // and non-fatal for callers that opt in via suppressNotFoundLogging —
+                // logged at Info, not Error, and never surfaced as a failure.
+                this.logger.Info("[Tmdb] No alternative titles available for {0}", url);
+                return string.Empty;
+            }
             catch (Exception ex)
             {
-                this.logger.ErrorException("[ManageComingSoon][Tmdb] HTTP fetch failed for {0}", ex, url);
+                this.logger.ErrorException("[Tmdb] HTTP fetch failed for {0}", ex, url);
                 return string.Empty;
             }
         }

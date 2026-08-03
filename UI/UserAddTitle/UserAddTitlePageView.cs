@@ -129,7 +129,7 @@ namespace ManageComingSoon.UI.UserAddTitle
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("[ManageComingSoon][UserAddTitle]" + UserTag() + " User Add Title command failed", ex);
+                this.logger.ErrorException("[UserAddTitle]" + UserTag() + " User Add Title command failed", ex);
                 SetStatus("The request failed: " + ex.Message, ItemStatus.Failed);
                 RebuildPage(preserveStatus: true);
                 return this;
@@ -228,7 +228,7 @@ namespace ManageComingSoon.UI.UserAddTitle
             {
                 entry.State = UserTitleState.SearchFailed;
                 entry.ErrorMessage = ex.Message;
-                this.logger.ErrorException("[ManageComingSoon][UserAddTitle]" + UserTag() + " TMDB search failed for '{0}'", ex, name);
+                this.logger.ErrorException("[UserAddTitle]" + UserTag() + " TMDB search failed for '{0}'", ex, name);
             }
         }
 
@@ -302,7 +302,7 @@ namespace ManageComingSoon.UI.UserAddTitle
                 catch (Exception ex)
                 {
                     candidate.CastNames = new List<string>();
-                    this.logger.ErrorException("[ManageComingSoon][UserAddTitle]" + UserTag() + " TMDB cast lookup failed for '{0}'", ex, candidate.TitleResult.Title);
+                    this.logger.ErrorException("[UserAddTitle]" + UserTag() + " TMDB cast lookup failed for '{0}'", ex, candidate.TitleResult.Title);
                 }
             }
         }

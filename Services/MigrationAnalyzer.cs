@@ -146,7 +146,7 @@ namespace ManageComingSoon.Services
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("[ManageComingSoon][MigrationAnalyzer] Error for {0}", ex, sourceFolderPath);
+                this.logger.ErrorException("[MigrationAnalyzer] Error for {0}", ex, sourceFolderPath);
                 result.Warnings.Add("Could not read filesystem: " + ex.Message);
                 result.IsSafeToProceed    = false;
                 result.WorstCaseScenarioText =

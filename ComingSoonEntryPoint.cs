@@ -74,7 +74,7 @@ namespace ManageComingSoon
         {
             try
             {
-                this.logger.Info("[ManageComingSoon][EntryPoint] Initializing persistence stores on startup...");
+                this.logger.Info("[EntryPoint] Initializing persistence stores on startup...");
 
                 // 1. Initialize AddTitle Store & Tracker
                 var addTitleStore = new AddTitleStore(this.appHost, this.logger);
@@ -89,16 +89,16 @@ namespace ManageComingSoon
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("[ManageComingSoon][EntryPoint] Critical failure initializing stores on startup", ex);
+                this.logger.ErrorException("[EntryPoint] Critical failure initializing stores on startup", ex);
             }
 
             this.libraryManager.ItemAdded += OnItemAdded;
-            this.logger.Info("[ManageComingSoon][EntryPoint] EntryPoint running – watching for Coming Soon items");
+            this.logger.Info("[EntryPoint] EntryPoint running – watching for Coming Soon items");
         }
 
         public void Dispose()
         {
-            this.logger.Info("[ManageComingSoon][EntryPoint] ComingSoonEntryPoint.Dispose() starting");
+            this.logger.Info("[EntryPoint] ComingSoonEntryPoint.Dispose() starting");
 
             this.libraryManager.ItemAdded -= OnItemAdded;
 
@@ -110,12 +110,12 @@ namespace ManageComingSoon
             foreach (var entry in active)
             {
                 this.logger.Warn(
-                    "[ManageComingSoon][EntryPoint] Server shutting down with make-live in progress for '{0}' " +
+                    "[EntryPoint] Server shutting down with make-live in progress for '{0}' " +
                     "(state={1}, path={2}). The file move may be incomplete.",
                     entry.ItemName, entry.State, entry.FolderPath);
             }
 
-            this.logger.Info("[ManageComingSoon][EntryPoint] ComingSoonEntryPoint.Dispose() complete");
+            this.logger.Info("[EntryPoint] ComingSoonEntryPoint.Dispose() complete");
         }
 
         // -----------------------------------------------------------------------
@@ -157,7 +157,7 @@ namespace ManageComingSoon
                 if (makeLiveEntry != null)
                 {
                     this.logger.Info(
-                        "[ManageComingSoon][EntryPoint] ItemAdded for '{0}' matches make-live target – marking complete",
+                        "[EntryPoint] ItemAdded for '{0}' matches make-live target – marking complete",
                         item.Name);
                     ManageComingSoon.Services.MakeLiveTracker.SetComplete(makeLiveEntry.FolderPath);
                     return;
@@ -194,7 +194,7 @@ namespace ManageComingSoon
                 }
 
                 this.logger.Info(
-                    "[ManageComingSoon][EntryPoint] ItemAdded fired for '{0}' (path={1}) – applying Coming Soon tag",
+                    "[EntryPoint] ItemAdded fired for '{0}' (path={1}) – applying Coming Soon tag",
                     tagTarget.Name, tagTarget.Path);
 
                 // Apply tag using the pattern confirmed working by community:
@@ -228,7 +228,7 @@ namespace ManageComingSoon
                         null);
 
                     this.logger.Info(
-                        "[ManageComingSoon][EntryPoint] Tag '{0}' applied to '{1}' (Tags field locked to protect it from provider refresh)",
+                        "[EntryPoint] Tag '{0}' applied to '{1}' (Tags field locked to protect it from provider refresh)",
                         comingSoonTag, tagTarget.Name);
                 }
 
@@ -247,7 +247,7 @@ namespace ManageComingSoon
                 if (addEntry != null)
                 {
                     this.logger.Info(
-                        "[ManageComingSoon][EntryPoint] ItemAdded for '{0}' matches AddTitleTracker entry '{1}' – notifying AddTitleTask",
+                        "[EntryPoint] ItemAdded for '{0}' matches AddTitleTracker entry '{1}' – notifying AddTitleTask",
                         item.Name, addEntry.Id);
                     ManageComingSoon.Services.AddTitleTracker.NotifyPathConfirmed(matchedPath);
                 }
@@ -258,7 +258,7 @@ namespace ManageComingSoon
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("[ManageComingSoon][EntryPoint] Error in OnItemAdded", ex);
+                this.logger.ErrorException("[EntryPoint] Error in OnItemAdded", ex);
             }
         }
     }

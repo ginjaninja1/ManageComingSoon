@@ -145,7 +145,7 @@ namespace ManageComingSoon.Services
             catch (Exception ex)
             {
                 this.logger.Warn(
-                    "[ManageComingSoon][Tmdb] TMDB library conflict check failed for TmdbId {0}: {1}",
+                    "[Tmdb] TMDB library conflict check failed for TmdbId {0}: {1}",
                     tmdbId, ex.Message);
                 return new TmdbConflictResult();
             }
@@ -313,14 +313,14 @@ namespace ManageComingSoon.Services
         {
             if (string.IsNullOrEmpty(apiKey))
             {
-                this.logger.Warn("[ManageComingSoon][{0}] No Emby API key configured — cannot call the refresh endpoint.", logPrefix);
+                this.logger.Warn("[{0}] No Emby API key configured — cannot call the refresh endpoint.", logPrefix);
                 return null;
             }
 
             string baseUrl = await this.appHost.GetLocalApiUrl(token).ConfigureAwait(false);
             if (string.IsNullOrEmpty(baseUrl))
             {
-                this.logger.Warn("[ManageComingSoon][{0}] GetLocalApiUrl returned empty.", logPrefix);
+                this.logger.Warn("[{0}] GetLocalApiUrl returned empty.", logPrefix);
                 return null;
             }
 
@@ -352,7 +352,7 @@ namespace ManageComingSoon.Services
                 Uri.EscapeDataString(apiKey));
 
             this.logger.Info(
-                "[ManageComingSoon][{0}]{1} POST /Items/{2}/Refresh — target=({3}) InternalId={2} Mode={4}",
+                "[{0}]{1} POST /Items/{2}/Refresh — target=({3}) InternalId={2} Mode={4}",
                 stageLabel, ctxTag, internalId, roleLabel, mode);
 
             var options = new HttpRequestOptions
@@ -366,7 +366,7 @@ namespace ManageComingSoon.Services
             using (var response = await httpClient.Post(options).ConfigureAwait(false))
             {
                 this.logger.Info(
-                    "[ManageComingSoon][{0}]{1} POST /Items/{2}/Refresh ({3}) returned (2xx implied)",
+                    "[{0}]{1} POST /Items/{2}/Refresh ({3}) returned (2xx implied)",
                     stageLabel, ctxTag, internalId, roleLabel);
             }
         }
@@ -401,7 +401,7 @@ namespace ManageComingSoon.Services
                 catch (Exception ex)
                 {
                     this.logger.Warn(
-                        "[ManageComingSoon][{0}] Best-effort full refresh failed for '{1}' " +
+                        "[{0}] Best-effort full refresh failed for '{1}' " +
                         "(harmless — {2}; this only affects when/whether full " +
                         "metadata and images show up): {3}",
                         stageLabel, itemLabel, alreadySucceededContext, ex.Message);
@@ -467,7 +467,7 @@ namespace ManageComingSoon.Services
                 if (probe())
                 {
                     this.logger.Info(
-                        "[ManageComingSoon][{0}]{1} Condition met at ~{2}s (timings={3}, {4} pass).",
+                        "[{0}]{1} Condition met at ~{2}s (timings={3}, {4} pass).",
                         stageLabel, ctxTag, elapsed, timings, ordinal);
                     return true;
                 }
@@ -476,7 +476,7 @@ namespace ManageComingSoon.Services
                 if (!isLastPass)
                 {
                     this.logger.Info(
-                        "[ManageComingSoon][{0}]{1} Not met after {2} pass (timings={3}, {4}s elapsed)" +
+                        "[{0}]{1} Not met after {2} pass (timings={3}, {4}s elapsed)" +
                         " — starting {5} pass (+{6}s).",
                         stageLabel, ctxTag, ordinal, timings, elapsed,
                         OrdinalPass(i + 2), passSeconds[i + 1]);
@@ -484,7 +484,7 @@ namespace ManageComingSoon.Services
             }
 
             this.logger.Warn(
-                "[ManageComingSoon][{0}]{1} Condition NOT met after ~{2}s (timings={3}) — treating as failed.",
+                "[{0}]{1} Condition NOT met after ~{2}s (timings={3}) — treating as failed.",
                 stageLabel, ctxTag, elapsed, timings);
             return false;
         }
@@ -516,12 +516,12 @@ namespace ManageComingSoon.Services
         {
             if (item == null)
             {
-                this.logger.Info("[ManageComingSoon][TEST] {0}: ({1}) item is null", label, roleLabel);
+                this.logger.Info("[TEST] {0}: ({1}) item is null", label, roleLabel);
                 return;
             }
 
             this.logger.Info(
-                "[ManageComingSoon][TEST] {0}: ({1}) InternalId={2} Type={3} Name='{4}' Path='{5}' Tags=[{6}]",
+                "[TEST] {0}: ({1}) InternalId={2} Type={3} Name='{4}' Path='{5}' Tags=[{6}]",
                 label,
                 roleLabel,
                 item.InternalId,
