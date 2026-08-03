@@ -10,6 +10,7 @@
 		<Compile Remove="ChannelEntryPoint.cs" />
 		<Compile Remove="ChannelUI.cs" />
 		<Compile Remove="Services\EmbyLibraryService.cs" />
+		<Compile Remove="Storage\PluginConfigStore.cs" />
 		<Compile Remove="UI\AddTitle\Addtitlepageview.polling.cs" />
 	</ItemGroup>
 	<!--

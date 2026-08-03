@@ -1,7 +1,7 @@
 // ManageComingSoon - Add Title Store
 // JSON-backed persistence for the Add Coming Soon search list.
-// Stores a List<AddTitleEntry> as a single file in Emby's plugin data folder.
-// Mirrors the PluginConfigStore pattern exactly.
+// Stores a List<AddTitleEntry> as a single file in ManageComingSoon's own data folder.
+// Mirrors the MakeLiveStore pattern exactly.
 
 namespace ManageComingSoon.Storage
 {
@@ -30,7 +30,7 @@ namespace ManageComingSoon.Storage
             this.fileSystem = applicationHost.Resolve<IFileSystem>();
 
             var appPaths = applicationHost.Resolve<IApplicationPaths>();
-            string dir = appPaths.PluginConfigurationsPath;
+            string dir = Path.Combine(appPaths.DataPath, "ManageComingSoon");
 
             if (!this.fileSystem.DirectoryExists(dir))
                 this.fileSystem.CreateDirectory(dir);
