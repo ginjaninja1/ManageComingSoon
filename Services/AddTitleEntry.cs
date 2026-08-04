@@ -140,6 +140,15 @@ namespace ManageComingSoon.Services
         public string SearchName { get; set; } = string.Empty;
         public int? SearchYear { get; set; }
 
+        /// <summary>
+        /// Username of the requesting user for self-service adds submitted via
+        /// UserAddTitlePageView. Empty for admin/system-originated entries
+        /// (e.g. the admin Add Coming Soon page). Populated at submission time
+        /// from the page view's session-scoped this.User — AddTitleTask itself
+        /// has no session context, so this must be carried on the entry.
+        /// </summary>
+        public string RequestedByUser { get; set; } = string.Empty;
+
         // ---- Lifecycle timestamps ------------------------------------------
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? CompletedAt { get; set; }

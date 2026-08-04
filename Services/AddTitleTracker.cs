@@ -156,7 +156,7 @@ namespace ManageComingSoon.Services
         // -----------------------------------------------------------------------
 
         /// <summary>[UI] Creates a new entry in Searching state and persists it.</summary>
-        public static AddTitleEntry Add(string searchName, int? searchYear, ComingSoonMediaType mediaType)
+        public static AddTitleEntry Add(string searchName, int? searchYear, ComingSoonMediaType mediaType, string requestedByUser = "")
         {
             var entry = new AddTitleEntry
             {
@@ -166,6 +166,7 @@ namespace ManageComingSoon.Services
                 MediaType = mediaType,
                 CreatedAt = DateTime.UtcNow,
                 State = AddTitleState.Searching,
+                RequestedByUser = requestedByUser ?? string.Empty,
             };
 
             lock (Lock)
@@ -182,7 +183,7 @@ namespace ManageComingSoon.Services
         /// [UI] Creates a new manually-confirmed entry using the user's typed
         /// title/year, bypassing provider search.
         /// </summary>
-        public static AddTitleEntry AddManual(string searchName, int? searchYear, ComingSoonMediaType mediaType)
+        public static AddTitleEntry AddManual(string searchName, int? searchYear, ComingSoonMediaType mediaType, string requestedByUser = "")
         {
             var entry = new AddTitleEntry
             {
@@ -198,6 +199,7 @@ namespace ManageComingSoon.Services
                 ConfirmedOverview = string.Empty,
                 ConfirmedPosterPath = string.Empty,
                 Candidates = new List<AddTitleCandidate>(),
+                RequestedByUser = requestedByUser ?? string.Empty,
             };
 
             lock (Lock)

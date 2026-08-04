@@ -336,13 +336,14 @@ namespace ManageComingSoon.Services
                 // exception with a full stack trace, which would be misleading
                 // noise for anyone reading the server log.
                 this.logger.Info(
-                    "[AddPipeline] Pipeline for '{0}' was cancelled — superseded by a faster completion path.",
+                    "[AddPipeline] Pipeline for '{0}' stopped — the item was already confirmed added via " +
+                    "ComingSoonEntryPoint's faster event-driven path.",
                     title.Title);
                 return new AddComingSoonResult
                 {
                     Success = false,
                     FailedAtStage = AddComingSoonStage.Complete,
-                    FailureReason = "Cancelled — superseded by a faster completion path.",
+                    FailureReason = "Stopped — superseded by ComingSoonEntryPoint's faster completion path.",
                     FolderPath = folderPath
                 };
             }

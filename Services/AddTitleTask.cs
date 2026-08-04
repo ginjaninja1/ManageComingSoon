@@ -61,6 +61,15 @@ namespace ManageComingSoon.Services
         private static Func<ComingSoonMediaType, string> staticGetTargetPath;
         private static Func<string> staticGetCustomStubPath;
 
+        /// <summary>
+        /// Matches the [Subheading][Username] convention used in
+        /// UserAddTitlePageView.UserTag(). Empty when the entry has no
+        /// requesting user (admin/system-originated adds).
+        /// </summary>
+        private static string UserTag(AddTitleEntry item) =>
+            string.IsNullOrEmpty(item.RequestedByUser) ? string.Empty : "[" + item.RequestedByUser + "]";
+
+
         public bool IsHidden => true;
 
         // Keeps the task active so it can still be executed via code
@@ -106,7 +115,7 @@ namespace ManageComingSoon.Services
         public string Category => "GinjaNinja Tools";
         public string Key => "ManageComingSoon_AddTitle";
 
-        
+
 
         public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
             => new TaskTriggerInfo[0];
@@ -138,7 +147,7 @@ namespace ManageComingSoon.Services
 
             if (items.Length == 0)
             {
-                this.Logger.Info("[AddTitleTask] AddTitleTask started but queue is empty — nothing to do.");
+                this.Logger.Info("[AddTitleTask] started but queue is empty — nothing to do.");
                 progress.Report(100);
                 return;
             }
@@ -147,10 +156,10 @@ namespace ManageComingSoon.Services
             string customStubPath = staticGetCustomStubPath != null ? staticGetCustomStubPath() : null;
 
             if (string.IsNullOrEmpty(apiKey))
-                this.Logger.Warn("[AddTitleTask] AddTitleTask starting with NO Emby API key — " +
+                this.Logger.Warn("[AddTitleTask] starting with NO Emby API key — " +
                     "every item will fail at the library-refresh stage. Set it on the Configuration tab.");
 
-            this.Logger.Info("[AddTitleTask] AddTitleTask starting — {0} item(s) to process.", items.Length);
+            this.Logger.Info("[AddTitleTask] starting — {0} item(s) to process.", items.Length);
 
             int successCount = 0;
             int failCount = 0;
@@ -160,7 +169,7 @@ namespace ManageComingSoon.Services
                 if (cancellationToken.IsCancellationRequested)
                 {
                     this.Logger.Warn(
-                        "[AddTitleTask] AddTitleTask cancelled — {0} item(s) remaining left Queued for resume.",
+                        "[AddTitleTask] cancelled — {0} item(s) remaining left Queued for resume.",
                         items.Length - i);
                     break;
                 }
@@ -172,8 +181,9 @@ namespace ManageComingSoon.Services
                 double sliceStart = (double)itemIndex / items.Length * 100.0;
                 double sliceSize = 100.0 / items.Length;
 
-                this.Logger.Info("[AddTitleTask] AddTitleTask processing {0} [{1}/{2}] '{3}'",
-                    item.MediaType.DisplayName(), itemIndex + 1, items.Length, item.ConfirmedTitle);
+                this.Logger.Info("[AddTitleTask]{4} processing {0} [{1}/{2}] '{3}'",
+                    item.MediaType.DisplayName(), itemIndex + 1, items.Length, item.ConfirmedTitle,
+                    UserTag(item));
 
                 if (string.IsNullOrEmpty(targetPath))
                 {
@@ -282,7 +292,7 @@ namespace ManageComingSoon.Services
                             {
                                 if (t.IsFaulted)
                                     this.Logger.Warn(
-                                        "[AddTitleTask] AddTitleTask [{0}/{1}] '{2}' — pipeline raised after fast-path short-circuit (harmless): {3}",
+                                        "[AddTitleTask] [{0}/{1}] '{2}' — pipeline raised after fast-path short-circuit (harmless): {3}",
                                         itemIndex + 1, items.Length, item.ConfirmedTitle,
                                         t.Exception.GetBaseException().Message);
                             }, TaskScheduler.Default);
@@ -303,8 +313,8 @@ namespace ManageComingSoon.Services
                             ThrottlePush();
                             AddTitleTracker.SetAdded(item.Id, item.AddedFolderPath);
                             this.Logger.Info(
-                                "[AddTitleTask] AddTitleTask [{0}/{1}] '{2}' — path confirmed by ComingSoonEntryPoint; applying completion.",
-                                itemIndex + 1, items.Length, item.ConfirmedTitle);
+                                "[AddTitleTask]{3} [{0}/{1}] '{2}' — path confirmed by ComingSoonEntryPoint; applying completion.",
+                                itemIndex + 1, items.Length, item.ConfirmedTitle, UserTag(item));
                             successCount++;
 
                             progress.Report(sliceStart + sliceSize);
@@ -329,8 +339,8 @@ namespace ManageComingSoon.Services
                                 ThrottlePush();
                                 AddTitleTracker.SetAdded(item.Id, result.FolderPath);
                                 this.Logger.Info(
-                                    "[AddTitleTask] AddTitleTask [{0}/{1}] '{2}' — succeeded.",
-                                    itemIndex + 1, items.Length, item.ConfirmedTitle);
+                                    "[AddTitleTask]{3} [{0}/{1}] '{2}' — succeeded.",
+                                    itemIndex + 1, items.Length, item.ConfirmedTitle, UserTag(item));
                                 successCount++;
                             }
                             else
@@ -340,8 +350,8 @@ namespace ManageComingSoon.Services
                                     string.Format("Add failed ({0}): {1}",
                                         result.FailedAtStage, result.FailureReason));
                                 this.Logger.Warn(
-                                    "[AddTitleTask] AddTitleTask [{0}/{1}] '{2}' — failed at stage {3}: {4}",
-                                    itemIndex + 1, items.Length, item.ConfirmedTitle,
+                                    "[AddTitleTask]{3} [{0}/{1}] '{2}' — failed at stage {4}: {5}",
+                                    itemIndex + 1, items.Length, item.ConfirmedTitle, UserTag(item),
                                     result.FailedAtStage, result.FailureReason);
                                 failCount++;
                             }
@@ -351,7 +361,7 @@ namespace ManageComingSoon.Services
                     catch (OperationCanceledException)
                     {
                         this.Logger.Warn(
-                            "[AddTitleTask] AddTitleTask [{0}/{1}] '{2}' — cancelled mid-pipeline; re-queued.",
+                            "[AddTitleTask] [{0}/{1}] '{2}' — cancelled mid-pipeline; re-queued.",
                             itemIndex + 1, items.Length, item.ConfirmedTitle);
                         // SetQueued only accepts Confident/AddFailed — go via
                         // AddFailed to satisfy the guard, then immediately re-queue.
@@ -364,7 +374,7 @@ namespace ManageComingSoon.Services
                     catch (Exception ex)
                     {
                         this.Logger.ErrorException(
-                            "[AddTitleTask] AddTitleTask [{0}/{1}] '{2}' — unexpected exception",
+                            "[AddTitleTask] [{0}/{1}] '{2}' — unexpected exception",
                             ex, itemIndex + 1, items.Length, item.ConfirmedTitle);
                         AddTitleTracker.SetAddFailed(item.Id,
                             string.Format("Add failed: {0} — see server log", ex.Message));
@@ -393,7 +403,7 @@ namespace ManageComingSoon.Services
                     {
                         var waitFor = minGap - elapsed;
                         this.Logger.Info(
-                            "[AddTitleTask] AddTitleTask [{0}/{1}] '{2}' completed in {3:0}ms — " +
+                            "[AddTitleTask] [{0}/{1}] '{2}' completed in {3:0}ms — " +
                             "holding {4:0}ms before starting next item (MinGapBetweenItemsSeconds={5}s floor).",
                             itemIndex + 1, items.Length, item.ConfirmedTitle,
                             elapsed.TotalMilliseconds, waitFor.TotalMilliseconds, MinGapBetweenItemsSeconds);
@@ -412,7 +422,7 @@ namespace ManageComingSoon.Services
 
             progress.Report(100);
             this.Logger.Info(
-                "[AddTitleTask] AddTitleTask complete — {0} succeeded, {1} failed.",
+                "[AddTitleTask] complete — {0} succeeded, {1} failed.",
                 successCount, failCount);
 
             // Fire a single Default refresh on the library after all items are
@@ -452,7 +462,7 @@ namespace ManageComingSoon.Services
                                     CancellationToken.None).ConfigureAwait(false);
 
                                 this.Logger.Info(
-                                    "[AddTitleTask] AddTitleTask post-queue FullRefresh fired on {0} library InternalId={1}.",
+                                    "[AddTitleTask] post-queue FullRefresh fired on {0} library InternalId={1}.",
                                     mediaType.DisplayName(), library.InternalId);
                             }
                         }
@@ -461,7 +471,7 @@ namespace ManageComingSoon.Services
                 catch (Exception ex)
                 {
                     this.Logger.Warn(
-                        "[AddTitleTask] AddTitleTask post-queue refresh failed (non-fatal — " +
+                        "[AddTitleTask] post-queue refresh failed (non-fatal — " +
                         "metadata will appear on the next scheduled scan): {0}", ex.Message);
                 }
             }

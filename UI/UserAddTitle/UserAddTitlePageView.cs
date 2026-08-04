@@ -373,12 +373,12 @@ namespace ManageComingSoon.UI.UserAddTitle
                 AddTitleEntry global;
                 if (entry.IsManual)
                 {
-                    global = AddTitleTracker.AddManual(entry.SearchName, entry.SearchYear, entry.MediaType);
+                    global = AddTitleTracker.AddManual(entry.SearchName, entry.SearchYear, entry.MediaType, this.User?.Name);
                 }
                 else
                 {
                     if (entry.SelectedMatch == null) continue;
-                    global = AddTitleTracker.Add(entry.SearchName, entry.SearchYear, entry.MediaType);
+                    global = AddTitleTracker.Add(entry.SearchName, entry.SearchYear, entry.MediaType, this.User?.Name);
                     AddTitleTracker.SetConfident(global.Id, entry.SelectedMatch);
                 }
 

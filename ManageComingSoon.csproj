@@ -4,7 +4,7 @@
 		<AssemblyName>Emby.ManageComingSoon</AssemblyName>
 		<RootNamespace>ManageComingSoon</RootNamespace>
 		<LangVersion>latest</LangVersion>
-		<Version>0.0.0.5</Version>
+		<Version>0.0.0.6</Version>
 	</PropertyGroup>
 	<ItemGroup>
 		<Compile Remove="ChannelEntryPoint.cs" />
