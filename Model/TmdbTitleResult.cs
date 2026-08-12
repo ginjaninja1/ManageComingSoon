@@ -1,5 +1,6 @@
 namespace ManageComingSoon.Model
 {
+    using System;
     using System.Runtime.Serialization;
 
     // TMDB JSON field names (confirmed from working PowerShell script):
@@ -8,6 +9,13 @@ namespace ManageComingSoon.Model
     // ServiceStack.Text maps JSON keys to C# properties case-insensitively,
     // stripping underscores, so release_date -> ReleaseDate etc.
     // We add [DataMember(Name=...)] as an explicit fallback hint.
+    //
+    // NOTE: when populated via TmdbService.MapResult() (Emby's built-in TMDB
+    // provider path) rather than the direct TMDB HTTP /search path, PosterPath
+    // holds a full absolute URL (Emby's RemoteSearchResult.ImageUrl is already
+    // baseImageUrl + poster_path — confirmed via decompiled MovieDbSearch.cs),
+    // not a bare TMDB path like the direct-HTTP path returns. PosterUrl()
+    // below handles both shapes.
     [DataContract]
     public class TmdbTitleResult
     {
@@ -55,7 +63,17 @@ namespace ManageComingSoon.Model
         }
 
         public string PosterUrl(string baseUrl = "https://image.tmdb.org/t/p/w342")
-            => string.IsNullOrEmpty(PosterPath) ? string.Empty : baseUrl + PosterPath;
+        {
+            if (string.IsNullOrEmpty(PosterPath)) return string.Empty;
+
+            // Emby's built-in-provider path (TmdbService.MapResult) already
+            // supplies a full absolute URL — pass it through as-is rather
+            // than double-prefixing. The direct-HTTP path still gives a bare
+            // TMDB path (e.g. "/abc123.jpg") that needs baseUrl prepended.
+            return PosterPath.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                ? PosterPath
+                : baseUrl + PosterPath;
+        }
 
         public void Normalize(ComingSoonMediaType mediaType)
         {

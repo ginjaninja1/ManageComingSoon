@@ -20,8 +20,8 @@ namespace ManageComingSoon.UI.Configuration
 
         public CaptionItem CaptionTmdb { get; set; } = new CaptionItem("API Keys");
 
-        [DisplayName("TMDB API Key")]
-        [Description("Your personal API key from https://www.themoviedb.org/settings/api")]
+        [DisplayName("TMDB API Key (optional)")]
+        [Description("Optional. Search and matching now use Emby's own built-in TMDB provider (Dashboard > Metadata), so this key is no longer required for adding titles. Set a personal key from https://www.themoviedb.org/settings/api only if you want cast/credits shown in the Info panel — that's the only thing this key still enables.")]
         [AutoPostBack("ConfigurationChanged", nameof(TmdbApiKey))]
         public string TmdbApiKey { get; set; } = string.Empty;
 

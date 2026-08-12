@@ -78,7 +78,7 @@ namespace ManageComingSoon
                     var jsonSerializer = this.appHost.Resolve<IJsonSerializer>();
                     var libraryMonitor = this.appHost.Resolve<ILibraryMonitor>();
 
-                    var tmdbService = new TmdbService(httpClient, jsonSerializer, this.logger);
+                    var tmdbService = new TmdbService(httpClient, jsonSerializer, this.logger, providerManager);
 
                     if (this.addServiceInstance == null)
                     {

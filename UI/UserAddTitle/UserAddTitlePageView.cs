@@ -149,11 +149,9 @@ namespace ManageComingSoon.UI.UserAddTitle
                 SetStatus(string.Format("Please add {0} or fewer titles at a time.", MaxBulkEntries), ItemStatus.Failed);
                 return;
             }
-            if (string.IsNullOrWhiteSpace(this.plugin.Configuration.TmdbApiKey))
-            {
-                SetStatus("TMDB matching is unavailable because the administrator has not configured an API key. Manual submission is still available.", ItemStatus.Warning);
-                return;
-            }
+            // TMDB search now goes through Emby's own built-in provider
+            // (Dashboard > Metadata key), so no plugin-configured key is
+            // required for matching any more.
 
             UI.TitleName = string.Empty;
             UI.ReleaseYear = string.Empty;
@@ -289,7 +287,8 @@ namespace ManageComingSoon.UI.UserAddTitle
             }
             this.expandedInfo.Add(key);
             var candidate = entry.Candidates[index];
-            if (candidate.CastNames == null)
+            bool hasKey = !string.IsNullOrWhiteSpace(this.plugin.Configuration.TmdbApiKey);
+            if (candidate.CastNames == null && hasKey)
             {
                 try
                 {
@@ -574,15 +573,14 @@ namespace ManageComingSoon.UI.UserAddTitle
 
         private void RefreshButtonState()
         {
-            bool hasKey = !string.IsNullOrWhiteSpace(this.plugin.Configuration.TmdbApiKey);
-            UI.AddViaTmdbButton = new ButtonItem(hasKey
-                ? "Add via TMDB Match"
-                : "TMDB matching unavailable")
+            // TMDB search goes through Emby's own built-in provider now, so
+            // this button no longer depends on a plugin-configured key.
+            UI.AddViaTmdbButton = new ButtonItem("Add via TMDB Match")
             {
                 Icon = IconNames.search,
                 Data1 = "AddViaTmdb",
                 CommandId = "AddViaTmdb",
-                IsEnabled = hasKey,
+                IsEnabled = true,
             };
         }
 
@@ -757,7 +755,7 @@ namespace ManageComingSoon.UI.UserAddTitle
             return rows;
         }
 
-        private static List<GenericListItem> BuildInfoRows(UserTitleCandidate candidate)
+        private List<GenericListItem> BuildInfoRows(UserTitleCandidate candidate)
         {
             var rows = new List<GenericListItem>();
             string url = "https://www.themoviedb.org/" + candidate.TitleResult.MediaType.TmdbPathSegment() + "/" +
@@ -768,7 +766,18 @@ namespace ManageComingSoon.UI.UserAddTitle
                 HyperLink = url,
                 HyperLinkTargetExternal = true
             });
-            if (candidate.CastNames == null || candidate.CastNames.Count == 0)
+
+            bool hasKey = !string.IsNullOrWhiteSpace(this.plugin.Configuration.TmdbApiKey);
+
+            // No explanatory row when hasKey is false here — unlike the admin
+            // page, non-admin users can't see the Configuration tab, so a
+            // message pointing them at it is meaningless. Just omit cast
+            // entirely and let the row stand on its own.
+            if (!hasKey)
+            {
+                // no-op — deliberately no row added
+            }
+            else if (candidate.CastNames == null || candidate.CastNames.Count == 0)
                 rows.Add(new GenericListItem(IconNames.person, "No cast information available", string.Empty)
                 { IconMode = ItemListIconMode.SmallRegular });
             else

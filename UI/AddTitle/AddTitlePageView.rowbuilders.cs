@@ -378,10 +378,12 @@ namespace ManageComingSoon.UI.AddTitle
         }
 
         // -----------------------------------------------------------------------
-        // Info sub-items: TMDB link + cast
+        // Info sub-items: TMDB link + cast. Instance method (not static) so it
+        // can check whether a TMDB key is configured — cast/credits are the
+        // one remaining feature that still needs it (search itself doesn't).
         // -----------------------------------------------------------------------
 
-        private static List<GenericListItem> BuildInfoSubItems(AddTitleCandidate c)
+        private List<GenericListItem> BuildInfoSubItems(AddTitleCandidate c)
         {
             var items = new List<GenericListItem>();
 
@@ -395,7 +397,17 @@ namespace ManageComingSoon.UI.AddTitle
                 HyperLinkTargetExternal = true,
             });
 
-            if (c.CastNames == null)
+            bool hasKey = !string.IsNullOrWhiteSpace(this.plugin.Configuration.TmdbApiKey);
+
+            if (!hasKey)
+            {
+                items.Add(new GenericListItem(
+                    IconNames.person,
+                    "Cast unavailable — add a TMDB API key on the Configuration tab to enable this.",
+                    string.Empty)
+                { IconMode = ItemListIconMode.SmallRegular });
+            }
+            else if (c.CastNames == null)
             {
                 items.Add(new GenericListItem(
                     IconNames.movie,

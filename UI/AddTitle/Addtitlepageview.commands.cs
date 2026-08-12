@@ -191,14 +191,9 @@ namespace ManageComingSoon.UI.AddTitle
 
             RefreshAddButtonState();
 
-            if (string.IsNullOrWhiteSpace(this.plugin.Configuration.TmdbApiKey))
-            {
-                SetOverallStatus(
-                    "TMDB API key not configured. Please add one on the Configuration tab before adding titles.",
-                    ItemStatus.Failed);
-                RequestUiRefresh(preserveStatus: true);
-                return;
-            }
+            // TMDB search now goes through Emby's own built-in provider
+            // (Dashboard > Metadata key), so no plugin-configured key is
+            // required to add titles any more.
 
             string rawName = ui.TitleName ?? string.Empty;
             string rawYear = ui.ReleaseYear;
@@ -622,19 +617,15 @@ namespace ManageComingSoon.UI.AddTitle
             if (entry == null) return;
             var cfg = this.plugin.Configuration;
 
-            if (string.IsNullOrWhiteSpace(cfg.TmdbApiKey))
-            {
-                AddTitleTracker.SetSearchFailed(id,
-                    "TMDB API key not configured. Please set it on the Configuration tab.");
-                RequestUiRefresh();
-                return;
-            }
-
             try
             {
                 this.logger.Debug("[TmdbSearch]" + UserTag() + " Searching TMDB for '{0}' year={1}",
                     name, year.HasValue ? year.Value.ToString() : "none");
 
+                // TMDB search itself goes via Emby's built-in provider (no key
+                // required). cfg.TmdbApiKey, if set, is only used to boost
+                // matches found via alternative titles — a direct-HTTP-only
+                // capability Emby's provider manager doesn't expose.
                 var results = await this.tmdbService
                     .SearchAsync(cfg.TmdbApiKey, name, year, entry.MediaType, this.cts.Token)
                     .ConfigureAwait(false);

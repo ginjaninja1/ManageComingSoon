@@ -40,15 +40,15 @@ namespace ManageComingSoon.UI.AddTitle
 
         private void RefreshAddButtonState()
         {
-            bool hasKey = !string.IsNullOrWhiteSpace(this.plugin.Configuration.TmdbApiKey);
-            UI.AddToListButton = new ButtonItem(hasKey
-                ? "Add via Provider Match"
-                : "Register for and add a TMDB API key first")
+            // Search now goes through Emby's own built-in TMDB provider, so
+            // no plugin-configured key is required to add titles any more —
+            // TmdbApiKey only gates cast/credits in the Info panel now.
+            UI.AddToListButton = new ButtonItem("Add via Provider Match")
             {
                 StandardIcon = StandardIcons.Add,
                 Data1 = "AddToList",
                 CommandId = "AddToList",
-                IsEnabled = hasKey,
+                IsEnabled = true,
             };
             UI.AddManualButton = new ButtonItem("Add Manual")
             {

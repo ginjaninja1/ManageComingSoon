@@ -1,14 +1,33 @@
 // ManageComingSoon - TMDB Service
-// Uses Emby's IHttpClient to fetch JSON, then reads the stream to a string
-// before deserialising — this avoids any double-read issues with the stream.
-// Property names on the POCO classes match TMDB's JSON keys exactly as
-// ServiceStack.Text expects them (it maps snake_case keys to PascalCase
-// properties case-insensitively, so release_date -> ReleaseDate etc).
+// Search now goes through Emby's own built-in TMDB provider via
+// IProviderManager.GetRemoteSearchResults, using Emby's server-configured
+// TMDB key (Dashboard > Metadata) instead of a plugin-supplied key. This
+// removes the hard requirement on PluginConfiguration.TmdbApiKey for search.
+//
+// GetMovieDetailsAsync, GetCastAsync, and the alternative-titles boost step
+// still use direct TMDB HTTP calls with a caller-supplied key. Confirmed via
+// decompile (v4.10.0.22): IProviderManager.GetCredits(Person, ...) exists but
+// takes a Person and returns that PERSON's filmography via
+// IPersonMetadataProvider — there is no built-in "get this movie's cast"
+// call. This is a permanent gap in the built-in provider, not something
+// pending further investigation — cast/credits stay on the old
+// user-key-based HTTP path for good.
+//
+// RemoteSearchResult mapping confirmed via decompile (v4.10.0.22) of
+// MediaBrowser.Model.Providers.RemoteSearchResult and MovieDbSearch.cs — see
+// MapResult() below for exactly what Emby's built-in provider does and
+// doesn't populate for a name/year search (Overview and OriginalTitle are
+// permanently blank on this path; Popularity doesn't exist on the type at
+// all; ImageUrl and PremiereDate are populated and now mapped).
 namespace ManageComingSoon.Services
 {
     using ManageComingSoon.Model;
     using MediaBrowser.Common.Net;
+    using MediaBrowser.Controller.Entities.Movies;
+    using MediaBrowser.Controller.Entities.TV;
+    using MediaBrowser.Controller.Providers;
     using MediaBrowser.Model.Logging;
+    using MediaBrowser.Model.Providers;
     using MediaBrowser.Model.Serialization;
     using System;
     using System.Collections.Generic;
@@ -22,24 +41,38 @@ namespace ManageComingSoon.Services
     public class TmdbService
     {
         private const string BaseUrl = "https://api.themoviedb.org/3";
+        private const string EmbyTmdbProviderName = "TheMovieDb";
 
         private readonly IHttpClient httpClient;
         private readonly IJsonSerializer json;
         private readonly ILogger logger;
+        private readonly IProviderManager providerManager;
 
-        public TmdbService(IHttpClient httpClient, IJsonSerializer json, ILogger logger)
+        public TmdbService(
+            IHttpClient httpClient,
+            IJsonSerializer json,
+            ILogger logger,
+            IProviderManager providerManager)
         {
             this.httpClient = httpClient;
             this.json = json;
             this.logger = logger;
+            this.providerManager = providerManager;
         }
 
         // -----------------------------------------------------------------------
         // Public API
         // -----------------------------------------------------------------------
 
+        /// <summary>
+        /// Searches via Emby's built-in TMDB provider (Emby's own server-configured
+        /// key — no plugin key required). altTitlesApiKey is optional: when supplied
+        /// it's used only for the alternative-titles boost step (direct TMDB HTTP
+        /// call), which Emby's provider manager does not expose. Pass null/empty to
+        /// skip that boost entirely — search still works without it.
+        /// </summary>
         public async Task<List<TmdbTitleResult>> SearchAsync(
-            string apiKey,
+            string altTitlesApiKey,
             string titleName,
             int? year,
             ComingSoonMediaType mediaType,
@@ -48,23 +81,27 @@ namespace ManageComingSoon.Services
             var results = new List<TmdbTitleResult>();
 
             // Primary search (with year if supplied)
-            var primary = await SearchTitleAsync(apiKey, titleName, year, mediaType, token).ConfigureAwait(false);
+            var primary = await SearchViaProviderManagerAsync(titleName, year, mediaType, token).ConfigureAwait(false);
             MergeInto(results, primary);
 
             // Also search without year so ±1 candidates aren't missed
             if (year.HasValue)
             {
-                var noYear = await SearchTitleAsync(apiKey, titleName, null, mediaType, token).ConfigureAwait(false);
+                var noYear = await SearchViaProviderManagerAsync(titleName, null, mediaType, token).ConfigureAwait(false);
                 MergeInto(results, noYear);
             }
 
-            // Boost results that match via alternative titles
+            // Boost results that match via alternative titles — only when a key
+            // was supplied, since this still goes over the direct TMDB HTTP path.
             var altBoostIds = new HashSet<int>();
-            foreach (var r in results.ToList())
+            if (!string.IsNullOrWhiteSpace(altTitlesApiKey))
             {
-                var alts = await GetAltTitlesAsync(apiKey, r.Id, mediaType, token).ConfigureAwait(false);
-                if (alts.Any(a => string.Equals(a, titleName, StringComparison.OrdinalIgnoreCase)))
-                    altBoostIds.Add(r.Id);
+                foreach (var r in results.ToList())
+                {
+                    var alts = await GetAltTitlesAsync(altTitlesApiKey, r.Id, mediaType, token).ConfigureAwait(false);
+                    if (alts.Any(a => string.Equals(a, titleName, StringComparison.OrdinalIgnoreCase)))
+                        altBoostIds.Add(r.Id);
+                }
             }
 
             // Score and sort — most confident first
@@ -138,6 +175,7 @@ namespace ManageComingSoon.Services
         /// is needed. Used as the fallback enrichment path for Radarr-sourced
         /// channel items when Radarr's own Images list has no usable poster.
         /// Returns null on any failure — never throws.
+        /// Still uses the direct TMDB HTTP path — see file header re: scope.
         /// </summary>
         public async Task<TmdbMovieDetails> GetMovieDetailsAsync(
             string apiKey,
@@ -165,6 +203,7 @@ namespace ManageComingSoon.Services
         /// <summary>
         /// Fetches the top 3 cast member names for a movie from TMDB /movie/{id}/credits.
         /// Returns an empty list on any failure — never throws.
+        /// Still uses the direct TMDB HTTP path — see file header re: scope.
         /// </summary>
         public async Task<List<string>> GetCastAsync(
             string apiKey, int tmdbId, ComingSoonMediaType mediaType,
@@ -196,40 +235,121 @@ namespace ManageComingSoon.Services
         }
 
         // -----------------------------------------------------------------------
-        // Private: HTTP fetch helpers
+        // Private: Emby built-in provider search
         // -----------------------------------------------------------------------
 
-        private async Task<List<TmdbTitleResult>> SearchTitleAsync(
-            string apiKey, string query, int? year, ComingSoonMediaType mediaType, CancellationToken token)
+        private async Task<List<TmdbTitleResult>> SearchViaProviderManagerAsync(
+            string titleName, int? year, ComingSoonMediaType mediaType, CancellationToken token)
         {
-            string url = string.Format(
-                "{0}/search/{1}?api_key={2}&query={3}&include_adult=false",
-                BaseUrl,
-                mediaType.TmdbPathSegment(),
-                Uri.EscapeDataString(apiKey),
-                Uri.EscapeDataString(query));
-
-            if (year.HasValue)
-                url += (mediaType == ComingSoonMediaType.TvShow ? "&first_air_date_year=" : "&primary_release_year=") + year.Value;
-
-            string raw = await FetchStringAsync(url, token).ConfigureAwait(false);
-            if (string.IsNullOrEmpty(raw)) return new List<TmdbTitleResult>();
-
             try
             {
-                var wrapper = this.json.DeserializeFromString<TmdbSearchWrapper>(raw);
-                var results = wrapper != null && wrapper.Results != null
-                    ? wrapper.Results
-                    : new List<TmdbTitleResult>();
-                foreach (var result in results) result.Normalize(mediaType);
-                return results;
+                if (mediaType == ComingSoonMediaType.TvShow)
+                {
+                    // UNCONFIRMED: SeriesInfo property names (Name, Year) assumed
+                    // to mirror MovieInfo/ItemLookupInfo — not independently
+                    // verified via ILSpy. Confirm before relying on TV search.
+                    var query = new RemoteSearchQuery<SeriesInfo>
+                    {
+                        SearchInfo = new SeriesInfo { Name = titleName, Year = year },
+                        SearchProviderName = EmbyTmdbProviderName,
+                        IncludeDisabledProviders = false
+                    };
+
+                    var results = await this.providerManager
+                        .GetRemoteSearchResults<Series, SeriesInfo>(query, token)
+                        .ConfigureAwait(false);
+
+                    return (results ?? Enumerable.Empty<RemoteSearchResult>())
+                        .Select(r => MapResult(r, mediaType))
+                        .ToList();
+                }
+                else
+                {
+                    var query = new RemoteSearchQuery<MovieInfo>
+                    {
+                        SearchInfo = new MovieInfo { Name = titleName, Year = year },
+                        SearchProviderName = EmbyTmdbProviderName,
+                        IncludeDisabledProviders = false
+                    };
+
+                    var results = await this.providerManager
+                        .GetRemoteSearchResults<Movie, MovieInfo>(query, token)
+                        .ConfigureAwait(false);
+
+                    return (results ?? Enumerable.Empty<RemoteSearchResult>())
+                        .Select(r => MapResult(r, mediaType))
+                        .ToList();
+                }
             }
             catch (Exception ex)
             {
-                this.logger.ErrorException("[Tmdb] Failed to parse TMDB search response", ex);
+                this.logger.ErrorException(
+                    "[Tmdb] Emby provider search failed for '{0}' ({1})", ex, titleName, mediaType);
                 return new List<TmdbTitleResult>();
             }
         }
+
+        // Mapping confirmed against decompiled MediaBrowser.Model.Providers.
+        // RemoteSearchResult and Emby.Providers' MovieDbSearch.cs (v4.10.0.22):
+        //
+        //  • OriginalTitle and Overview DO exist on RemoteSearchResult, but
+        //    MovieDbSearch.ParseMovieSearchResult/ToRemoteSearchResult — the
+        //    methods that actually build results for a name/year search —
+        //    never set them. Emby only populates those two when looking up a
+        //    movie/series it already has a TMDB id for (a different code path
+        //    this plugin doesn't use). This is a permanent limitation of the
+        //    built-in provider for search-by-name, not a pending TODO — left
+        //    blank deliberately rather than guessed.
+        //  • Popularity has no equivalent field on RemoteSearchResult at all.
+        //  • ImageUrl IS populated by the search path (baseImageUrl +
+        //    poster_path, already a full absolute URL — see PosterUrl() in
+        //    TmdbTitleResult.cs for how that's handled without double-prefixing).
+        //  • PremiereDate, when present, gives the real release date; falls
+        //    back to a Jan-1 placeholder built from ProductionYear only when
+        //    Emby's provider couldn't parse a full date.
+        private static TmdbTitleResult MapResult(RemoteSearchResult r, ComingSoonMediaType mediaType)
+        {
+            var mapped = new TmdbTitleResult
+            {
+                MediaType = mediaType,
+                Title = r.Name ?? string.Empty,
+                Name = r.Name ?? string.Empty,
+                OriginalTitle = r.OriginalTitle ?? string.Empty,
+                Overview = r.Overview ?? string.Empty,
+                PosterPath = r.ImageUrl ?? string.Empty,
+            };
+
+            if (r.ProviderIds != null)
+            {
+                string tmdbIdStr;
+                if (r.ProviderIds.TryGetValue("Tmdb", out tmdbIdStr))
+                {
+                    int tmdbId;
+                    if (int.TryParse(tmdbIdStr, out tmdbId)) mapped.Id = tmdbId;
+                }
+            }
+
+            string releaseDate = r.PremiereDate.HasValue
+                ? r.PremiereDate.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                : (r.ProductionYear.HasValue
+                    ? r.ProductionYear.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) + "-01-01"
+                    : string.Empty);
+
+            // ReleaseYear (used everywhere — display, scoring, IsConfidentMatch)
+            // only ever reads ReleaseDate, never FirstAirDate, so ReleaseDate
+            // must always be set regardless of media type. FirstAirDate is set
+            // too for parity with the old direct-HTTP/Normalize() shape, but
+            // nothing currently reads it back out.
+            mapped.ReleaseDate = releaseDate;
+            if (mediaType == ComingSoonMediaType.TvShow)
+                mapped.FirstAirDate = releaseDate;
+
+            return mapped;
+        }
+
+        // -----------------------------------------------------------------------
+        // Private: HTTP fetch helpers (alt titles, cast, direct-by-id details)
+        // -----------------------------------------------------------------------
 
         private async Task<List<string>> GetAltTitlesAsync(
             string apiKey, int movieId, ComingSoonMediaType mediaType, CancellationToken token)
@@ -304,7 +424,10 @@ namespace ManageComingSoon.Services
         //  • Year is a strong secondary signal — exact match gets a big boost
         //  • Word-level Jaccard similarity handles partial/reordered titles
         //  • Recency bonus when no year given (user likely means a new release)
-        //  • Popularity (log-scaled) breaks ties without drowning title/year
+        //  • Popularity (log-scaled) breaks ties without drowning title/year —
+        //    NOTE: provider-manager-sourced results currently have Popularity=0
+        //    (unmapped, see file header), so this term is inert until that's
+        //    resolved. Title/year/Jaccard signals still dominate regardless.
         // -----------------------------------------------------------------------
 
         private static double Score(
@@ -432,13 +555,9 @@ namespace ManageComingSoon.Services
         }
 
         // -----------------------------------------------------------------------
-        // Private POCO types for JSON deserialisation
+        // Private POCO types for JSON deserialisation (alt titles / cast, still
+        // direct-HTTP paths — see file header)
         // -----------------------------------------------------------------------
-
-        private class TmdbSearchWrapper
-        {
-            public List<TmdbTitleResult> Results { get; set; }
-        }
 
         private class TmdbAltTitlesWrapper
         {
