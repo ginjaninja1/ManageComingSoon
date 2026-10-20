@@ -65,7 +65,10 @@ namespace ManageComingSoon.UI
         public Task CheckIsUserAuthorised(UserDto user, IPluginUIView requestedView)
         {
             if (user == null)
-                throw new UnauthorizedAccessException("You must be signed in to use this page.");
+            {
+                // throw new UnauthorizedAccessException("You must be signed in to use this page.");
+            }
+                
             return Task.CompletedTask;
         }
     }

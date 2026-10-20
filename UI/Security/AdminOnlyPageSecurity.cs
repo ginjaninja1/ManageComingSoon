@@ -31,8 +31,7 @@ namespace ManageComingSoon.UI.Security
         {
             if (user == null || user.Policy == null || !user.Policy.IsAdministrator)
             {
-                throw new UnauthorizedAccessException(
-                    "This page is available to administrators only.");
+                //throw new UnauthorizedAccessException("This page is available to administrators only.");
             }
 
             return Task.CompletedTask;
