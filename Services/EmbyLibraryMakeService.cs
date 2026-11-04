@@ -1310,22 +1310,29 @@ namespace ManageComingSoon.Services
 
         private async Task<bool> Stage_ConfirmTargetStateAsync(MoveContext ctx, CancellationToken token)
         {
-            string expectedPath = ctx.MoveRequested ? ctx.TargetMovieFolderPath : ctx.SourceFolderPath;
+            string expectedPath = ctx.MoveRequested ? ctx.MovieNewVideoPath : ctx.MovieOriginalVideoPath;
 
             BaseItem confirmedItem = null;
             bool met = await WaitForConditionAsync(
                 () =>
                 {
-                    confirmedItem = this.libraryManager.FindByPath(expectedPath, true);
+                    confirmedItem = this.libraryManager.FindByPath(expectedPath, false);
                     if (ctx.Mode == MakeLiveMode.Advanced)
                         LogIdentitySnapshot(ctx, "ConfirmTargetStateProbe");
                     if (confirmedItem != null)
                         this.logger.Info(
-                            "[Pipeline/IdentityTrace]{0} Target path probe returned InternalId={1}, Guid={2}, " +
-                            "Type={3}, Path='{4}', ParentId={5}; original InternalId={6}.",
-                            ctx.LogContext, confirmedItem.InternalId, confirmedItem.Id,
+                            "[Pipeline/IdentityTrace]{0} Target Movie probe FindByPath('{1}', false) returned " +
+                            "InternalId={2}, Guid={3}, Type={4}, Path='{5}', ParentId={6}; " +
+                            "expected original Movie InternalId={7}, Guid={8}.",
+                            ctx.LogContext, expectedPath,
+                            confirmedItem.InternalId, confirmedItem.Id,
                             confirmedItem.GetType().Name, confirmedItem.Path,
-                            confirmedItem.ParentId, ctx.MovieOriginalInternalId);
+                            confirmedItem.ParentId, ctx.MovieOriginalInternalId, ctx.MovieOriginalId);
+                    else
+                        this.logger.Info(
+                            "[Pipeline/IdentityTrace]{0} Target Movie probe FindByPath('{1}', false) returned null; " +
+                            "no Movie row is currently indexed at the expected media-file path.",
+                            ctx.LogContext, expectedPath);
                     return confirmedItem != null;
                 },
                 token, "Pipeline/ConfirmTargetState",
@@ -1335,7 +1342,7 @@ namespace ManageComingSoon.Services
             if (!met) return false;
 
             ctx.FinalItem = confirmedItem;
-            LogItemState("Pipeline/ConfirmTargetState - confirmed", "Movie Folder", ctx.FinalItem);
+            LogItemState("Pipeline/ConfirmTargetState - confirmed Movie", "Movie", ctx.FinalItem);
             return true;
         }
 
@@ -1446,8 +1453,9 @@ namespace ManageComingSoon.Services
             try
             {
                 BaseItem original = this.libraryManager.GetItemById(ctx.MovieOriginalInternalId);
-                BaseItem atTarget = this.libraryManager.FindByPath(ctx.TargetMovieFolderPath, true);
-                var targetRows = FindAllByPath(ctx.TargetMovieFolderPath, isFolder: true);
+                BaseItem atTargetFolder = this.libraryManager.FindByPath(ctx.TargetMovieFolderPath, true);
+                BaseItem atTargetMovie = this.libraryManager.FindByPath(ctx.MovieNewVideoPath, false);
+                var targetRows = FindAllByPath(ctx.MovieNewVideoPath, isFolder: false);
                 string originalState = original == null
                     ? "ABSENT from LibraryManager.GetItemById"
                     : string.Format(
@@ -1457,14 +1465,20 @@ namespace ManageComingSoon.Services
                         original.GetParent()?.Path ?? "(null)");
 
                 this.logger.Info(
-                    "[Pipeline/IdentityTrace]{0} {1}: original InternalId={2}, Guid={3} is {4}; " +
-                    "FindByPath(target)={5}; FindAllByPath(target) count={6}, rows=[{7}].",
+                    "[Pipeline/IdentityTrace]{0} {1}: original Movie InternalId={2}, Guid={3} is {4}; " +
+                    "target Folder lookup={5}; target Movie lookup at '{6}'={7}; " +
+                    "FindAllByPath(movie file) count={8}, rows=[{9}].",
                     ctx.LogContext, checkpoint, ctx.MovieOriginalInternalId,
                     ctx.MovieOriginalId, originalState,
-                    atTarget == null ? "null" : string.Format(
+                    atTargetFolder == null ? "null" : string.Format(
                         "InternalId={0}, Guid={1}, Type={2}, Path='{3}', ParentId={4}",
-                        atTarget.InternalId, atTarget.Id, atTarget.GetType().Name,
-                        atTarget.Path, atTarget.ParentId),
+                        atTargetFolder.InternalId, atTargetFolder.Id, atTargetFolder.GetType().Name,
+                        atTargetFolder.Path, atTargetFolder.ParentId),
+                    ctx.MovieNewVideoPath,
+                    atTargetMovie == null ? "null" : string.Format(
+                        "InternalId={0}, Guid={1}, Type={2}, Path='{3}', ParentId={4}",
+                        atTargetMovie.InternalId, atTargetMovie.Id, atTargetMovie.GetType().Name,
+                        atTargetMovie.Path, atTargetMovie.ParentId),
                     targetRows.Length,
                     string.Join("; ", targetRows.Select(i => string.Format(
                         "InternalId={0}, Guid={1}, Type={2}, Path='{3}', ParentId={4}",
@@ -1492,8 +1506,8 @@ namespace ManageComingSoon.Services
             if (!ctx.MoveRequested)
                 return new SteadyStateResult { FinalId = ctx.FinalItem?.Id };
 
-            string expectedPath = ctx.TargetMovieFolderPath;
-            var allAtPath = FindAllByPath(expectedPath, isFolder: true);
+            string expectedPath = ctx.MovieNewVideoPath;
+            var allAtPath = FindAllByPath(expectedPath, isFolder: false);
 
             bool duplicateDetected = allAtPath.Length > 1;
             bool identityPreserved = allAtPath.Any(i => i.InternalId == ctx.MovieOriginalInternalId);
@@ -1504,14 +1518,10 @@ namespace ManageComingSoon.Services
             if (duplicateDetected)
             {
                 this.logger.Warn(
-                    "[Pipeline/SteadyStateCheck]{0} DUPLICATE detected: {1} item(s) at '{2}' " +
+                    "[Pipeline/SteadyStateCheck]{0} DUPLICATE detected: {1} Movie row(s) at file path '{2}' " +
                     "(InternalIds: [{3}]); original InternalId={4} is {5}. Advanced mode SaveItem " +
-                    "successfully persisted the original row's new path/parent, but the recursive " +
-                    "folder-validate scan subsequently re-derived a Guid from the NEW path and " +
-                    "registered the original row as a recognized child under the new parent at the " +
-                    "relational level that the recursive folder-validate scan checks — so the scan " +
-                    "creates a fresh row for the same file. The move itself succeeded, but watch " +
-                    "state/userdata on the original row may not have carried over.",
+                    "saved its new file path/parent before refresh. Check IdentityTrace and Emby " +
+                    "item-added/removed events to identify which refresh replaced or duplicated it.",
                     ctx.LogContext, allAtPath.Length, expectedPath,
                     string.Join(", ", allAtPath.Select(i => i.InternalId.ToString())),
                     ctx.MovieOriginalInternalId,
@@ -1520,12 +1530,14 @@ namespace ManageComingSoon.Services
             else if (ctx.MoveRequested && !identityPreserved && allAtPath.Length == 1)
             {
                 this.logger.Warn(
-                    "[Pipeline/SteadyStateCheck]{0} Identity NOT preserved: item at '{1}' has " +
-                    "InternalId={2}, expected {3}. The move succeeded, but watch state/userdata on " +
-                    "the original row was NOT carried over.",
+                    "[Pipeline/SteadyStateCheck]{0} Identity NOT preserved: Movie row at file path " +
+                    "'{1}' has InternalId={2}, Guid={3}; expected original Movie InternalId={4}, " +
+                    "Guid={5}. The move succeeded, but watch state/userdata on the original row " +
+                    "was NOT carried over.",
                     ctx.LogContext, expectedPath,
                     allAtPath.Length > 0 ? allAtPath[0].InternalId.ToString() : "none",
-                    ctx.MovieOriginalInternalId);
+                    allAtPath.Length > 0 ? allAtPath[0].Id.ToString() : "none",
+                    ctx.MovieOriginalInternalId, ctx.MovieOriginalId);
             }
 
             this.logger.Info(
