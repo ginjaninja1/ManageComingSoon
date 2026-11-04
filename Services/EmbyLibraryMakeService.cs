@@ -133,6 +133,7 @@ namespace ManageComingSoon.Services
             public long MovieOriginalInternalId;
             public Guid MovieOriginalId;
             public string MovieOriginalVideoPath;
+            public Guid? MovieOriginalParentId;
 
             public Folder SourceFolder;
             public long? SourceFolderInternalId;
@@ -791,6 +792,7 @@ namespace ManageComingSoon.Services
             ctx.MovieOriginalInternalId = ctx.Movie.InternalId;
             ctx.MovieOriginalId = ctx.Movie.Id;
             ctx.MovieOriginalVideoPath = ctx.Movie.Path;
+            ctx.MovieOriginalParentId = ctx.Movie.ParentId;
 
             LogItemState("Pipeline/CaptureState - Movie", "Movie", ctx.Movie);
 
@@ -1243,16 +1245,27 @@ namespace ManageComingSoon.Services
                 // with no re-derivation involved — this is the actual fix for the
                 // duplicate-row symptom. See the original EmbyLibraryService for
                 // full derivation history.
+                LogIdentitySnapshot(ctx, "BeforeSaveAndReparent");
                 ctx.Movie.Path = ctx.MovieNewVideoPath;
                 ctx.Movie.ParentId = ctx.DestinationFolder.InternalId;
 
+                this.logger.Info(
+                    "[Pipeline/IdentityTrace]{0} Mutating original movie InternalId={1}, Guid={2}: " +
+                    "oldPath='{3}', newPath='{4}', oldParentId={5}, newParentId={6}; " +
+                    "target Folder InternalId={7}, Guid={8}.",
+                    ctx.LogContext, ctx.MovieOriginalInternalId, ctx.Movie.Id,
+                    ctx.MovieOriginalVideoPath, ctx.Movie.Path, ctx.MovieOriginalParentId,
+                    ctx.Movie.ParentId, ctx.DestinationFolder.InternalId, ctx.DestinationFolder.Id);
+
                 this.itemRepository.SaveItem(ctx.Movie, token);
+                LogIdentitySnapshot(ctx, "AfterSaveBeforeUpdateItem");
                 LogItemState(
                     "Pipeline/LibraryUpdateAndRefresh - tag+path+ParentId SaveItem (persisted directly)",
                     "Movie", ctx.Movie);
 
                 this.libraryManager.UpdateItem(ctx.Movie, ctx.DestinationFolder,
                     ItemUpdateType.MetadataEdit, null);
+                LogIdentitySnapshot(ctx, "AfterUpdateItemBeforeRefresh");
                 LogItemState(
                     "Pipeline/LibraryUpdateAndRefresh - UpdateItem (cache/event refresh)",
                     "Movie", ctx.Movie);
@@ -1275,11 +1288,15 @@ namespace ManageComingSoon.Services
 
             try
             {
+                if (ctx.Mode == MakeLiveMode.Advanced)
+                    LogIdentitySnapshot(ctx, "ImmediatelyBeforeTargetLibraryRefresh");
                 await CallRefreshEndpointAsync(
                     ctx.HttpClient, ctx.BaseUrl, ctx.TargetLibrary.InternalId,
                     "Library (target)", ctx.ApiKey, MetadataRefreshMode.Default,
                     "Pipeline/LibraryUpdateAndRefresh/Trigger", token, ctx.LogContext)
                     .ConfigureAwait(false);
+                if (ctx.Mode == MakeLiveMode.Advanced)
+                    LogIdentitySnapshot(ctx, "ImmediatelyAfterTargetLibraryRefreshAccepted");
             }
             catch (Exception ex)
             {
@@ -1300,6 +1317,15 @@ namespace ManageComingSoon.Services
                 () =>
                 {
                     confirmedItem = this.libraryManager.FindByPath(expectedPath, true);
+                    if (ctx.Mode == MakeLiveMode.Advanced)
+                        LogIdentitySnapshot(ctx, "ConfirmTargetStateProbe");
+                    if (confirmedItem != null)
+                        this.logger.Info(
+                            "[Pipeline/IdentityTrace]{0} Target path probe returned InternalId={1}, Guid={2}, " +
+                            "Type={3}, Path='{4}', ParentId={5}; original InternalId={6}.",
+                            ctx.LogContext, confirmedItem.InternalId, confirmedItem.Id,
+                            confirmedItem.GetType().Name, confirmedItem.Path,
+                            confirmedItem.ParentId, ctx.MovieOriginalInternalId);
                     return confirmedItem != null;
                 },
                 token, "Pipeline/ConfirmTargetState",
@@ -1387,12 +1413,14 @@ namespace ManageComingSoon.Services
 
             try
             {
+                LogIdentitySnapshot(ctx, "ImmediatelyBeforeSourceLibraryRefresh");
                 await CallRefreshEndpointAsync(
                     ctx.HttpClient, ctx.BaseUrl, ctx.SourceLibrary.InternalId,
                     "Library (source, orphan cleanup)", ctx.ApiKey,
                     MetadataRefreshMode.Default,
                     "Pipeline/CleanupSourceFolder", token, ctx.LogContext)
                     .ConfigureAwait(false);
+                LogIdentitySnapshot(ctx, "ImmediatelyAfterSourceLibraryRefreshAccepted");
             }
             catch (Exception ex)
             {
@@ -1407,6 +1435,48 @@ namespace ManageComingSoon.Services
                 token, "Pipeline/CleanupSourceFolder/WaitForRemoval",
                 NoNewContentFirstWaitSeconds, NoNewContentSecondWaitSeconds,
                 logContext: ctx.LogContext).ConfigureAwait(false);
+
+            LogIdentitySnapshot(ctx, "AfterSourceFolderRemovalConfirmation");
+        }
+
+        private void LogIdentitySnapshot(MoveContext ctx, string checkpoint)
+        {
+            if (ctx == null) return;
+
+            try
+            {
+                BaseItem original = this.libraryManager.GetItemById(ctx.MovieOriginalInternalId);
+                BaseItem atTarget = this.libraryManager.FindByPath(ctx.TargetMovieFolderPath, true);
+                var targetRows = FindAllByPath(ctx.TargetMovieFolderPath, isFolder: true);
+                string originalState = original == null
+                    ? "ABSENT from LibraryManager.GetItemById"
+                    : string.Format(
+                        "present: InternalId={0}, Guid={1}, Type={2}, Name='{3}', Path='{4}', ParentId={5}, ParentPath='{6}'",
+                        original.InternalId, original.Id, original.GetType().Name,
+                        original.Name, original.Path, original.ParentId,
+                        original.GetParent()?.Path ?? "(null)");
+
+                this.logger.Info(
+                    "[Pipeline/IdentityTrace]{0} {1}: original InternalId={2}, Guid={3} is {4}; " +
+                    "FindByPath(target)={5}; FindAllByPath(target) count={6}, rows=[{7}].",
+                    ctx.LogContext, checkpoint, ctx.MovieOriginalInternalId,
+                    ctx.MovieOriginalId, originalState,
+                    atTarget == null ? "null" : string.Format(
+                        "InternalId={0}, Guid={1}, Type={2}, Path='{3}', ParentId={4}",
+                        atTarget.InternalId, atTarget.Id, atTarget.GetType().Name,
+                        atTarget.Path, atTarget.ParentId),
+                    targetRows.Length,
+                    string.Join("; ", targetRows.Select(i => string.Format(
+                        "InternalId={0}, Guid={1}, Type={2}, Path='{3}', ParentId={4}",
+                        i.InternalId, i.Id, i.GetType().Name, i.Path, i.ParentId))));
+            }
+            catch (Exception ex)
+            {
+                this.logger.Warn(
+                    "[Pipeline/IdentityTrace]{0} {1}: identity snapshot failed for original " +
+                    "InternalId={2}: {3}",
+                    ctx.LogContext, checkpoint, ctx.MovieOriginalInternalId, ex);
+            }
         }
 
         private class SteadyStateResult
