@@ -46,6 +46,11 @@ namespace ManageComingSoon.Services
         protected const int NoNewContentFirstWaitSeconds = 2;
         protected const int NoNewContentSecondWaitSeconds = 7;
 
+        // A newly-created empty folder can take time to appear in Emby's index,
+        // especially when it is on a network share. Probe once per second for a
+        // full minute before failing the Make Live pipeline.
+        protected const int TargetFolderIngestTimeoutSeconds = 60;
+
         // Real previously-unseen video file: needs ffprobe + metadata pass headroom.
         protected const int NewContentFirstWaitSeconds = 20;
         protected const int NewContentSecondWaitSeconds = 60;
@@ -461,10 +466,35 @@ namespace ManageComingSoon.Services
                         "Checking for {0} — {1} Pass ({2}s)...",
                         conditionLabel, ordinal, waitSeconds));
 
+                this.logger.Info(
+                    "[{0}]{1} Waiting {2}s before {3} check {4}/{5}; outstanding condition: {6}.",
+                    stageLabel, ctxTag, waitSeconds, conditionLabel, i + 1, passSeconds.Length,
+                    conditionLabel);
                 await Task.Delay(TimeSpan.FromSeconds(waitSeconds), token).ConfigureAwait(false);
                 elapsed += waitSeconds;
 
-                if (probe())
+                this.logger.Info(
+                    "[{0}]{1} Check {2}/{3} at ~{4}s: probing condition '{5}'.",
+                    stageLabel, ctxTag, i + 1, passSeconds.Length, elapsed, conditionLabel);
+                bool conditionMet;
+                try
+                {
+                    conditionMet = probe();
+                    this.logger.Info(
+                        "[{0}]{1} Check {2}/{3} result at ~{4}s: {5}.",
+                        stageLabel, ctxTag, i + 1, passSeconds.Length, elapsed,
+                        conditionMet ? "MET" : "not met");
+                }
+                catch (Exception ex)
+                {
+                    this.logger.Warn(
+                        "[{0}]{1} Check {2}/{3} at ~{4}s threw while probing '{5}': {6}",
+                        stageLabel, ctxTag, i + 1, passSeconds.Length, elapsed,
+                        conditionLabel, ex);
+                    throw;
+                }
+
+                if (conditionMet)
                 {
                     this.logger.Info(
                         "[{0}]{1} Condition met at ~{2}s (timings={3}, {4} pass).",
@@ -487,6 +517,41 @@ namespace ManageComingSoon.Services
                 "[{0}]{1} Condition NOT met after ~{2}s (timings={3}) — treating as failed.",
                 stageLabel, ctxTag, elapsed, timings);
             return false;
+        }
+
+        /// <summary>
+        /// The Emby 4.11 ILibraryMonitor contract has no API for listing its
+        /// active FileRefresher instances. Report the supported, path-specific
+        /// signal instead, and be explicit that it does not reveal unrelated
+        /// monitor work elsewhere in the library.
+        /// </summary>
+        protected void LogLibraryMonitorState(string stageLabel, string logContext, string path)
+        {
+            string ctxTag = string.IsNullOrEmpty(logContext) ? string.Empty : logContext;
+            if (this.libraryMonitor == null)
+            {
+                this.logger.Info(
+                    "[{0}]{1} LibraryMonitor state unavailable (ILibraryMonitor is null); " +
+                    "active refreshers elsewhere cannot be enumerated through the Emby API.",
+                    stageLabel, ctxTag);
+                return;
+            }
+
+            try
+            {
+                bool locked = this.libraryMonitor.IsPathLocked(path.ToCharArray());
+                this.logger.Info(
+                    "[{0}]{1} LibraryMonitor path-state check for '{2}': IsPathLocked={3}. " +
+                    "Emby ILibraryMonitor exposes no active-refresher/pending-work enumeration, " +
+                    "so unrelated library monitor activity is not observable here.",
+                    stageLabel, ctxTag, path, locked);
+            }
+            catch (Exception ex)
+            {
+                this.logger.Warn(
+                    "[{0}]{1} LibraryMonitor path-state check failed for '{2}': {3}",
+                    stageLabel, ctxTag, path, ex);
+            }
         }
 
         protected static string OrdinalPass(int n)

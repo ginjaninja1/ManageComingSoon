@@ -861,16 +861,36 @@ namespace ManageComingSoon.Services
 
         private async Task<bool> Stage_EstablishTargetIdsAsync(MoveContext ctx, CancellationToken token)
         {
+            const string stage = "Pipeline/EstablishTargetIds";
+            string logContext = ctx.LogContext;
+            int checks = TargetFolderIngestTimeoutSeconds;
+            var intervals = Enumerable.Repeat(1, checks).ToArray();
+            int checkNumber = 0;
+
+            this.logger.Info(
+                "[{0}]{1} Waiting up to {2}s for target folder ingestion. Outstanding: " +
+                "LibraryManager.FindByPath(path, true) must return a Folder for '{3}'. " +
+                "Each check also records the path-specific LibraryMonitor lock state.",
+                stage, logContext, TargetFolderIngestTimeoutSeconds, ctx.TargetMovieFolderPath);
+
             bool met = await WaitForConditionAsync(
                 () =>
                 {
+                    checkNumber++;
+                    LogLibraryMonitorState(stage, logContext, ctx.TargetMovieFolderPath);
                     ctx.DestinationFolder =
                         this.libraryManager.FindByPath(ctx.TargetMovieFolderPath, true) as Folder;
+                    this.logger.Info(
+                        "[{0}]{1} Target-folder index probe {2}/{3}: FindByPath('{4}', true) returned {5}.",
+                        stage, logContext, checkNumber, checks, ctx.TargetMovieFolderPath,
+                        ctx.DestinationFolder == null ? "null (folder not indexed yet)" :
+                        string.Format("Folder InternalId={0}, Path='{1}'",
+                            ctx.DestinationFolder.InternalId, ctx.DestinationFolder.Path));
                     return ctx.DestinationFolder != null;
                 },
-                token, "Pipeline/EstablishTargetIds",
-                NoNewContentFirstWaitSeconds, NoNewContentSecondWaitSeconds,
-                logContext: ctx.LogContext).ConfigureAwait(false);
+                token, stage, intervals, null,
+                logContext: logContext,
+                conditionLabel: "Target folder indexed by LibraryManager.FindByPath").ConfigureAwait(false);
 
             if (!met)
             {
