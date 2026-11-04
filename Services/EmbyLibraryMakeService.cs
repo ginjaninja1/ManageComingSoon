@@ -133,7 +133,7 @@ namespace ManageComingSoon.Services
             public long MovieOriginalInternalId;
             public Guid MovieOriginalId;
             public string MovieOriginalVideoPath;
-            public Guid? MovieOriginalParentId;
+            public long? MovieOriginalParentId;
 
             public Folder SourceFolder;
             public long? SourceFolderInternalId;
