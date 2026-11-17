@@ -324,6 +324,9 @@ namespace ManageComingSoon.Services
                 ctx.OnStageMessage?.Invoke("Final state check\u2026");
                 var steadyState = await Stage_CheckSteadyStateAsync(ctx, token).ConfigureAwait(false);
                 Report(progress, MakeLiveStage.SteadyStateCheck);
+                // Emby's ItemUpdateService accepts DateCreated on POST
+                // /Items/{ItemId}; persist only after refreshes and final checks.
+                Stage_SetDateAddedToNow(ctx);
 
                 ctx.OnStageMessage?.Invoke("Unlocking tags field\u2026");
                 Stage_UnlockTags(ctx);
@@ -1500,6 +1503,47 @@ namespace ManageComingSoon.Services
             public bool? DuplicateDetected;
         }
 
+        private void Stage_SetDateAddedToNow(MoveContext ctx)
+        {
+            BaseItem item = ctx.FinalItem == null
+                ? null
+                : this.libraryManager.GetItemById(ctx.FinalItem.InternalId);
+            if (item == null)
+            {
+                this.logger.Warn(
+                    "[Pipeline/DateAdded]{0} Could not resolve confirmed media item; Date Added was not changed.",
+                    ctx.LogContext);
+                return;
+            }
+
+            DateTimeOffset previous = item.DateCreated;
+            DateTimeOffset target = DateTimeOffset.UtcNow;
+            item.DateCreated = target;
+            try
+            {
+                this.libraryManager.UpdateItem(item, item.GetParent(), ItemUpdateType.MetadataEdit, null);
+                BaseItem saved = this.libraryManager.GetItemById(item.InternalId);
+                if (saved != null && saved.DateCreated >= target.AddSeconds(-2))
+                {
+                    this.logger.Info(
+                        "[Pipeline/DateAdded]{0} SUCCESS — media item Id={1}, InternalId={2}, Date Added updated from {3:O} to {4:O} (verified {5:O}).",
+                        ctx.LogContext, item.Id, item.InternalId, previous, target, saved.DateCreated);
+                }
+                else
+                {
+                    this.logger.Warn(
+                        "[Pipeline/DateAdded]{0} FAILED verification — media item Id={1}, InternalId={2}, requested {3:O}, read back {4}.",
+                        ctx.LogContext, item.Id, item.InternalId, target,
+                        saved == null ? "null" : saved.DateCreated.ToString("O"));
+                }
+            }
+            catch (Exception ex)
+            {
+                this.logger.Warn(
+                    "[Pipeline/DateAdded]{0} FAILED — media item Id={1}, InternalId={2}, Date Added remains unverified: {3}.",
+                    ctx.LogContext, item.Id, item.InternalId, ex.Message);
+            }
+        }
         private async Task<SteadyStateResult> Stage_CheckSteadyStateAsync(
             MoveContext ctx, CancellationToken token)
         {
